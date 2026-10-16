@@ -1,0 +1,13 @@
+.pos-print-receipt { display: none; }
+@media print {
+  @page { margin: 8mm; }
+  body > *:not(.pos-print-receipt) { display: none !important; }
+  dialog { display: none !important; }
+  .pos-print-receipt { display: block; width: 72mm; margin: 0 auto; color: #000; background: #fff; font: 11px/1.5 monospace; overflow-wrap: anywhere; }
+  .pos-print-receipt header, .pos-print-receipt footer { text-align: center; }
+  .pos-print-receipt h1 { font-size: 15px; font-weight: bold; }
+  .pos-print-receipt section { border-top: 1px dashed #000; margin-top: 10px; padding-top: 8px; }
+  .pos-print-receipt footer { margin-top: 14px; }
+  .receipt-line { margin-bottom: 8px; break-inside: avoid; }
+  .receipt-pair { display: flex; justify-content: space-between; gap: 10px; }
+}

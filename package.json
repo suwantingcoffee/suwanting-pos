@@ -1,0 +1,23 @@
+{
+  "name": "suwanting-pos-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "lint": "npm --prefix frontend run lint",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "test": "node --test tests/database.test.mjs tests/inventory.test.mjs tests/cashier.test.mjs tests/client-config.test.mjs tests/pos-api.test.mjs tests/catalog-api.test.mjs",
+    "test:concurrency": "node --test tests/concurrency.test.mjs",
+    "test:ui": "playwright test",
+    "test:supabase": "node --test tests/supabase-api.test.mjs",
+    "types": "node scripts/generate-types.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "@playwright/test": "^1.58.2",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "pg": "^8.16.3"
+  }
+}
