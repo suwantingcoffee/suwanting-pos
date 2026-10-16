@@ -146,24 +146,32 @@ code saja, bukan `.env.local`, database password, maupun server secret.
 2. Pada repository GitHub buka **Settings → Pages**, pilih **GitHub Actions**
    sebagai Build and deployment source. Workflow akan berjalan ketika ada push
    ke branch `main`, atau dapat dijalankan manual dari **Actions**.
-3. Jika Supabase staging sudah siap, buka **Settings → Secrets and variables →
+3. Jika Pages belum pernah diaktifkan untuk repository, buat fine-grained
+   personal access token untuk repository ini saja, berikan izin **Pages: Read
+   and write**, lalu simpan token sebagai Actions secret bernama
+   `PAGES_ENABLEMENT_TOKEN`. Workflow menggunakannya hanya pada langkah
+   Configure Pages untuk mengaktifkan site. Jangan tempel token ke chat, file,
+   source, atau variabel `VITE_*`. Workflow kembali memakai `GITHUB_TOKEN`
+   setelah Pages terdaftar; setelah itu hapus secret dan revoke token. Jika
+   Pages sudah aktif, secret tersebut tidak diperlukan.
+4. Jika Supabase staging sudah siap, buka **Settings → Secrets and variables →
    Actions → Variables** dan tambahkan:
    - `VITE_SUPABASE_URL` = Project URL staging.
    - `VITE_SUPABASE_PUBLISHABLE_KEY` = publishable key untuk proyek yang sama.
-4. Workflow menghitung base path secara otomatis untuk project site
+5. Workflow menghitung base path secara otomatis untuk project site
    (`https://<owner>.github.io/<repo>/`) dan user site
    (`https://<owner>.github.io/`), serta memakai HashRouter supaya refresh route
    seperti `/#/reports` tetap berfungsi di hosting statis. Key publishable
    memang dikemas dalam bundle browser; jangan menambahkan service-role key
    sebagai repository variable/secret atau variabel `VITE_*`.
-5. Setelah workflow sukses, URL publik tersedia di **Settings → Pages** atau
+6. Setelah workflow sukses, URL publik tersedia di **Settings → Pages** atau
    ringkasan deployment. Tanpa dua variable Supabase tersebut, situs masih
    dapat dimuat tetapi fitur yang memerlukan database akan menampilkan error
    konfigurasi, bukan data operasional.
-6. Konfigurasikan Supabase Auth Site URL/redirect URL agar sesuai domain
+7. Konfigurasikan Supabase Auth Site URL/redirect URL agar sesuai domain
    `github.io` yang terbit. Pastikan database migration sudah diterapkan di
    Supabase dan akun owner/outlet sudah diprovisioning sebelum penggunaan nyata.
-7. Jika memakai GitHub Free, repository publik biasanya pilihan paling mudah
+8. Jika memakai GitHub Free, repository publik biasanya pilihan paling mudah
    untuk Pages; periksa aturan Pages/plan GitHub saat ini sebelum memilih
    visibilitas repository. Jangan unggah data pelanggan atau data produksi ke
    repository.

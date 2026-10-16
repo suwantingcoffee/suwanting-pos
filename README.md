@@ -94,11 +94,16 @@ Command `npm run build`; Output Directory `dist`.
    dalam source; `.env.local` diabaikan Git.
 2. Pada repository GitHub pilih **Settings → Pages → Build and deployment →
    GitHub Actions**. Workflow deploy berjalan pada push ke `main`.
-3. Untuk menggunakan backend Supabase, tambahkan `VITE_SUPABASE_URL` dan
+3. Untuk mengaktifkan Pages otomatis pada deployment pertama, buat fine-grained
+   personal access token terbatas ke repository ini dengan izin **Pages: Read
+   and write**, lalu simpan di **Settings → Secrets and variables → Actions**
+   dengan nama `PAGES_ENABLEMENT_TOKEN`. Jangan bagikan token. Setelah Pages
+   berhasil aktif, hapus secret dan revoke token tersebut.
+4. Untuk menggunakan backend Supabase, tambahkan `VITE_SUPABASE_URL` dan
    `VITE_SUPABASE_PUBLISHABLE_KEY` sebagai repository **Actions Variables**.
    Jangan gunakan service-role key. Ikuti
    [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) untuk setup Supabase.
-4. Tunggu workflow **Deploy frontend to GitHub Pages** sukses di tab **Actions**.
+5. Tunggu workflow **Deploy frontend to GitHub Pages** sukses di tab **Actions**.
    URL situs akan tercantum di **Settings → Pages**. URL project umumnya
    `https://<USERNAME>.github.io/<REPOSITORY>/`; route aplikasi menggunakan
    hash, misalnya `/#/reports`, agar kompatibel dengan hosting statis.
