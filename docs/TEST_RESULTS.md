@@ -8,15 +8,15 @@ perubahan lain pada database remote maupun situs Beta.
 
 | Pemeriksaan | Hasil aktual |
 | --- | --- |
-| `npm test` | **67 lulus, 0 gagal, 0 dilewati**, termasuk alur gabungan produk → stok → shift → penjualan → jurnal → laporan → rekonsiliasi |
+| `npm.cmd test` | **71 lulus, 0 gagal, 0 dilewati**, termasuk regresi identitas request/Auth/bootstrap, installer tanpa grant option Auth, dan alur gabungan produk → stok → shift → penjualan → jurnal → laporan → rekonsiliasi |
 | `npm run test:concurrency` | **1 lulus**, beberapa koneksi PostgreSQL native, termasuk dua kasir berbeda yang menjual stok terakhir bersamaan, request duplikat, refund, dan withdrawal stok |
-| `npm run test:ui` | **19 lulus**, Chrome headless/API tiruan, termasuk laporan, ekspor CSV, sesi kedaluwarsa, empty/error states, viewport HP/tablet/desktop, dan modal kasir HP |
-| 18 migration SQL terurut (001-018) | Berhasil dari database baru |
+| `npm run test:ui` (run sebelumnya, sebelum perbaikan identitas request) | **19 lulus**, Chrome headless/API tiruan, termasuk laporan, ekspor CSV, sesi kedaluwarsa, empty/error states, viewport HP/tablet/desktop, dan modal kasir HP |
+| 22 migration SQL terurut, sampai `20261018000100_login_bootstrap.sql` | Berhasil dari database baru, termasuk installer non-superuser tanpa grant option schema Auth dan bootstrap workspace login pertama |
 | Forward migration 007–013 pada database berisi data | Saldo, unit, movement lama dan tabel lain tetap utuh; installer non-superuser |
 | Instalasi oleh non-superuser CREATEROLE pemilik database | Lulus, termasuk seluruh fixture operasi dan finance |
 | RLS | 48 tabel memakai ENABLE dan FORCE RLS |
 | Batas migration 001/002 sebelum policy lengkap | Akses API sudah ditutup, termasuk dengan default grants Supabase yang luas |
-| `npm run types` | 48 tipe tabel dan 44 tipe RPC dihasilkan dari katalog database |
+| `npm run types` | 48 tipe tabel dan 45 tipe RPC dihasilkan dari katalog database |
 | `npm --prefix frontend run build` | ESLint, TypeScript strict, dan production Vite build lulus |
 | `supabase/preflight.sql` | Berhasil sebagai transaksi read-only pada database tes |
 | `npm run test:supabase` | **1 suite dilewati**, key/stack Supabase lokal belum tersedia |
@@ -29,6 +29,38 @@ Keduanya dijalankan ulang tanpa mengubah assertion atau melewati skenario.
 Satu percobaan UI mengalami tiga timeout saat server dev lambat. Pengulangan seluruh 11 skenario dengan assertion yang sama lulus dalam 48,2 detik. Stack Supabase penuh belum dijalankan: Docker/Supabase CLI tidak tersedia di PATH dan public key tes belum dikonfigurasi.
 
 ## Identitas dan skenario
+
+Pengujian perbaikan Auth tanggal 17 Oktober 2026 menjalankan ulang `npm.cmd test`,
+`npm.cmd run typecheck`, dan `npm.cmd run build` (ESLint, TypeScript, Vite); semuanya
+lulus. Test regresi memakai database PGlite terisolasi dengan organisasi berisi
+data dan installer non-superuser. Hak USAGE schema Auth dan EXECUTE `auth.uid()`
+dicabut oleh pemberi grant dalam harness, kemudian blok bootstrap aktual dari
+`docs/DEPLOYMENT.md` dijalankan. Error schema Auth berhasil direproduksi dan
+seluruh insert bootstrap rollback. Perbaikan USAGE saja masih menolak eksekusi
+`auth.uid()` bila EXECUTE juga hilang.
+
+Migration 002 diuji pada installer yang memang memiliki grant option dan dapat
+memulihkan kedua izin. Pada kondisi hosted yang ditiru, installer memiliki
+USAGE tetapi **tidak** memiliki grant option schema Auth: grant tidak menambah
+izin role internal. Seluruh migration sampai 003 dan RPC fixture tetap lulus
+berkat `private.request_user_id()`, tanpa USAGE schema Auth bagi role internal.
+Blok bootstrap aktual juga lulus tanpa JWT; audit admin mencatat `actor_id = NULL`
+dan percobaan bootstrap kedua ditolak tanpa organisasi duplikat.
+
+Migration 003 dijalankan dua kali pada database berisi saldo, mutasi, audit dan
+jurnal. Isi data, OID/owner/ACL/default argumen/SECURITY DEFINER/search_path fungsi
+lama, serta seluruh policy RLS tetap sama. Fungsi di luar pemilik role POS tetap
+utuh. Identitas audit pengguna, penolakan akses antarorganisasi dan eskalasi role,
+serta pencabutan membership installer sementara tetap diuji.
+
+Tes identitas menolak pemakaian `user_metadata` sebagai subject; claim kosong
+menghasilkan NULL, UUID/JSON invalid menolak operasi. Subject modern mengungguli
+legacy, dan sesi browser tidak boleh memanggil helper identitas langsung. Sesudah
+tambahan assertion bootstrap terakhir, ketiga tes terfokus `hosted installer|request
+identity` lulus, lalu seluruh `npm.cmd test` diulang: **71 lulus, 0 gagal, 0
+dilewati** (39,77 detik). Tes konkurensi PostgreSQL native juga diulang setelah
+migration 003: **1 lulus, 0 gagal** (23,55 detik). Verifikasi JWT oleh gateway dan
+proyek hosted pengguna belum diuji.
 
 Fixture berisi dua organisasi, tiga outlet, semua enam role (`owner`, `admin`,
 `manager`, `cashier`, `inventory_staff`, `finance_staff`), owner organisasi kedua,
@@ -147,9 +179,9 @@ perebutan stok terakhir. Pada run ini suite dilewati karena
 `SUPABASE_TEST_PUBLISHABLE_KEY` belum diisi; stack lokal belum dikonfigurasi.
 Hasil skip bukan hasil lulus.
 
-Workspace ini tidak memiliki metadata Git, sehingga pemeriksaan `git diff`
-terhadap baseline tidak tersedia. Pemeriksaan akhir mencakup source, daftar
-migration, dokumentasi, generator tipe, pengujian dan build yang tercatat di atas.
+Pemeriksaan akhir mencakup perubahan source melalui `git diff`, daftar migration,
+dokumentasi, pengujian dan build yang tercatat di atas. Perbaikan identitas request
+tidak mengubah kontrak RPC publik atau tipe tabel TypeScript.
 
 Sebelum rilis, jalankan langkah Supabase lokal di [SUPABASE.md](SUPABASE.md), isi
 `SUPABASE_TEST_PUBLISHABLE_KEY`, dan jalankan `npm run test:supabase` sampai seluruh

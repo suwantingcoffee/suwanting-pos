@@ -1,7 +1,8 @@
 # Produk, inventori, dan produksi
 
 Modul `/products` dan `/inventory` menggunakan Supabase Auth serta data nyata
-organisasi/outlet yang dapat dibaca akun tersebut. Dashboard utama tetap DEMO.
+organisasi/outlet yang dapat dibaca akun tersebut. Login muncul sebagai layar
+depan sebelum dashboard dan modul operasional.
 Login memerlukan akun Auth dengan membership aktif. Konfigurasi public client
 dan instalasi database dijelaskan di [SUPABASE.md](SUPABASE.md).
 

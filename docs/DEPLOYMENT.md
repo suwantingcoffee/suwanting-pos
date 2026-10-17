@@ -57,11 +57,83 @@ supabase migration list --linked
 
 Ulangi proses review, backup, dry-run, persetujuan, dan apply untuk produksi
 pada jendela perubahan. Migration berada di `supabase/migrations/`, berurutan
-dari `20261016000100_foundation.sql` sampai `20261016001800_reporting.sql`.
+dari `20261016000100_foundation.sql` sampai `20261018000100_login_bootstrap.sql`.
 Perubahan yang gagal harus ditangani melalui migration perbaikan yang ditinjau;
 jangan menghapus skema atau mengubah riwayat migration untuk memaksa sukses.
 
 ## 3. Buat owner pertama dan outlet
+
+Jika muncul `permission denied for schema auth` dari `private.audit_change()`,
+fungsi audit lama mencoba memanggil `auth.uid()` sebagai role `pos_auditor` yang
+tidak memiliki USAGE schema `auth`. Login pengguna tidak menguji izin role itu.
+Pada Supabase hosted, `postgres` bukan superuser penuh dan belum tentu boleh
+memberikan izin pada schema Auth yang dikelola Supabase.
+
+### Perbaikan identitas request pada database yang sudah dimigrasi
+
+Hasil `current_user = postgres`, `session_user = postgres`, dan
+`can_grant_auth_usage = false` berarti akun SQL Editor memang `postgres`, tetapi
+tidak memiliki hak mendelegasikan USAGE schema `auth`. Nilai EXECUTE `auth.uid()`
+yang `true` tidak menggantikan USAGE schema. Mengulang GRANT tidak menyelesaikan
+keterbatasan ini; jangan mengganti owner fungsi menjadi `postgres` atau membuka
+akses tabel Auth bagi role aplikasi.
+
+Perbaikan forward tersedia di
+[`20261017000300_request_identity.sql`](../supabase/migrations/20261017000300_request_identity.sql).
+Fungsi internal memakai `private.request_user_id()` untuk membaca `sub` dari
+JWT yang telah diverifikasi gateway Supabase/PostgREST. Role dan organisasi
+tetap diperiksa melalui membership aktif di database; metadata frontend tidak
+memberikan izin. Perbaikan tidak mengubah data bisnis, policy RLS, grants pemanggil,
+atau owner fungsi yang sudah ada. Tidak ada DROP, reset, maupun penonaktifan audit.
+
+Untuk proyek yang dikelola CLI, tinjau migration remote dan dry-run seperti
+bagian 2, lalu terapkan hanya migration pending yang telah ditinjau. Jangan
+menerapkan ulang baseline pada database POS yang sudah berisi data.
+
+Jika perbaikan darurat dilakukan melalui SQL Editor, pilih proyek yang benar dan
+role **postgres**, buka file migration 003 di atas, lalu jalankan **seluruh isi
+file**, termasuk `BEGIN` dan `COMMIT`. Migration dapat diulang; biarkan CLI
+menerapkannya pada deployment berikutnya agar riwayat CLI tercatat normal.
+Jangan menjalankan ulang seluruh rangkaian migration secara manual.
+
+Sesudah apply, jalankan pemeriksaan read-only berikut:
+
+```sql
+SELECT rolname,
+  has_function_privilege(rolname, 'private.request_user_id()', 'EXECUTE')
+    AS request_identity_execute
+FROM pg_roles
+WHERE rolname IN ('pos_identity', 'pos_writer', 'pos_auditor')
+ORDER BY rolname;
+
+SELECT n.nspname, p.proname
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+JOIN pg_roles r ON r.oid = p.proowner
+WHERE n.nspname IN ('public', 'private') AND p.prokind = 'f'
+  AND r.rolname IN ('pos_identity', 'pos_writer', 'pos_auditor')
+  AND strpos(p.prosrc, 'auth.uid()') > 0;
+```
+
+Query pertama harus menghasilkan tiga role dengan `request_identity_execute =
+true`; query kedua harus menghasilkan **0 baris**. `auth_usage = false` pada
+role internal tetap boleh terjadi karena fungsi tersebut tidak lagi memerlukan
+schema Auth. Policy profil yang memakai `auth.uid()` sebagai role `authenticated`
+tetap memakai akses Auth bawaan Supabase.
+
+Setelah verifikasi berhasil, ulangi blok `DO` bootstrap di bawah hanya jika
+organisasi pertama memang belum terbentuk. Kegagalan trigger pada satu statement
+`DO` menggulung balik seluruh insert statement tersebut. Jika organisasi sudah
+ada dari proses lain, gunakan owner aktif untuk menambahkan keanggotaan lewat
+`set_member`; jangan membuat organisasi duplikat.
+
+Migration `20261018000100_login_bootstrap.sql` menyediakan onboarding otomatis
+untuk database POS yang benar-benar kosong. Setelah `supabase db push`, login
+pertama memanggil `bootstrap_workspace` dan membuat organisasi owner serta outlet
+`MAIN` atomik. Jika organisasi sudah ada, RPC menolak akun tanpa membership agar
+login tidak membuka tenant milik orang lain; gunakan prosedur owner di bawah.
+
+### Bootstrap owner pertama
 
 Jangan aktifkan signup publik untuk membuat owner. Setelah Auth Dashboard
 mengundang/membuat akun pertama dan pengguna telah tercatat di Auth, gunakan

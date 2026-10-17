@@ -382,7 +382,7 @@ test('integrated product-to-sale-to-reconciliation flow preserves stock, journal
   assert.deepEqual([Number(reconciliation.expected_cash), Number(reconciliation.actual_cash), Number(reconciliation.variance)], [26000, 26000, 0]);
 });
 
-test('audit actor derives from auth.uid and membership revocation takes effect immediately', async () => {
+test('audit actor derives from the verified request subject and membership revocation takes effect immediately', async () => {
   const { rows } = await db.query("select actor_id from public.audit_logs where table_name='orders' and record_id=$1 and action='INSERT'", [f.order]);
   assert.equal(rows[0].actor_id, f.users.cashier);
   await f.rpc('owner', 'set_member', { p_organization_id: f.org, p_user_id: f.users.inventory_staff, p_role: 'inventory_staff', p_outlet_id: f.outlet, p_is_active: false });
@@ -394,6 +394,14 @@ test('function owners cannot bypass RLS, log in, create schema objects or grant 
   const { rows } = await db.query("select rolname,rolsuper,rolbypassrls,rolcanlogin,rolcreaterole from pg_roles where rolname in ('pos_identity','pos_writer','pos_auditor')");
   assert.equal(rows.length, 3);
   for (const r of rows) assert.ok(!r.rolsuper && !r.rolbypassrls && !r.rolcanlogin && !r.rolcreaterole, r.rolname);
+  const { rows: schemaGrants } = await db.query(`select rolname from pg_roles
+    where rolname in ('pos_identity','pos_writer','pos_auditor')
+      and has_schema_privilege(rolname,'auth','USAGE') order by rolname`);
+  assert.deepEqual(schemaGrants.map(r => r.rolname), ['pos_auditor','pos_identity','pos_writer']);
+  const { rows: uidGrants } = await db.query(`select rolname from pg_roles
+    where rolname in ('pos_identity','pos_writer','pos_auditor')
+      and has_function_privilege(rolname,'auth.uid()','EXECUTE') order by rolname`);
+  assert.deepEqual(uidGrants.map(r => r.rolname), ['pos_auditor','pos_identity','pos_writer']);
   const { rows: funcs } = await db.query(`select p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname in ('public','private') and p.prosecdef and not ('search_path=""'=any(p.proconfig))`);
   assert.deepEqual(funcs, []);
@@ -451,7 +459,7 @@ test('customer access follows its role matrix and archiving preserves transactio
 
 test('migrations and runtime RPCs work under a non-superuser CREATEROLE installer', async () => {
   const isolated = await migratedDatabase({ restrictedMigrator: true, onMigration: async (connection, file) => {
-    if (!/00[12]00_/.test(file)) return;
+    if (!file.startsWith('20261016000100_') && !file.startsWith('20261016000200_')) return;
     const { rows } = await connection.query(`select c.relname, c.relrowsecurity, c.relforcerowsecurity,
       has_table_privilege('anon',c.oid,'SELECT') as anonymous_read,
       has_table_privilege('authenticated',c.oid,'SELECT') as authenticated_read
@@ -473,4 +481,203 @@ test('migrations and runtime RPCs work under a non-superuser CREATEROLE installe
     assert.equal(membership.can_set_writer, false);
     assert.equal(membership.browser, false);
   } finally { await isolated.close(); }
+});
+
+test('forward Auth privilege repair restores audited bootstrap without data loss or broader tenant access', async () => {
+  const isolated = await migratedDatabase({ restrictedMigrator: true, throughMigration: '20261017000200_auth_uid_permissions.sql' });
+  try {
+    const repair = await readFile(new URL('../supabase/migrations/20261017000200_auth_uid_permissions.sql', import.meta.url), 'utf8');
+    const usageOnly = await readFile(new URL('../supabase/migrations/20261017000100_auth_schema_usage.sql', import.meta.url), 'utf8');
+    const deployment = await readFile(new URL('../docs/DEPLOYMENT.md', import.meta.url), 'utf8');
+    const bootstrapMatch = deployment.match(/```sql\r?\n(DO \$\$[\s\S]*?)\r?\n```/);
+    assert.ok(bootstrapMatch, 'Exercise the actual SQL Editor bootstrap from the setup guide');
+    const bootstrap = bootstrapMatch[1].replace('OWNER_EMAIL', 'bootstrap@example.test');
+    const ownerId = randomUUID(), otherOwnerId = randomUUID();
+    await isolated.query('insert into auth.users(id,email) values ($1,$2),($3,$4)',
+      [ownerId, 'bootstrap@example.test', otherOwnerId, 'existing@example.test']);
+    const [{ id: existingOrg }] = await asUser(isolated, otherOwnerId,
+      "select public.create_organization('Existing business') as id");
+    const snapshotSql = `select (select count(*)::int from public.organizations) organizations,
+      (select count(*)::int from public.organization_members) memberships,
+      (select count(*)::int from public.financial_accounts) accounts,
+      (select count(*)::int from public.audit_logs) audit`;
+    const before = (await isolated.query(snapshotSql)).rows;
+
+    // Reproduce the hosted failure even though normal baseline grants are correct.
+    // PUBLIC's default EXECUTE must also be removed to detect missing explicit grants.
+    await isolated.exec(`set role pos_migrator;
+      revoke usage on schema auth from pos_identity,pos_writer,pos_auditor;
+      revoke execute on function auth.uid() from pos_identity,pos_writer,pos_auditor;
+      reset role;
+      revoke execute on function auth.uid() from public`);
+    const { rows: brokenGrants } = await isolated.query(`select rolname,
+      has_schema_privilege(rolname,'auth','USAGE') as usage,
+      has_function_privilege(rolname,'auth.uid()','EXECUTE') as execute
+      from pg_roles where rolname in ('pos_identity','pos_writer','pos_auditor')`);
+    for (const row of brokenGrants) assert.ok(!row.usage && !row.execute, row.rolname);
+    // SQL Editor bootstrap requires a trusted database administrator. The
+    // NO BYPASSRLS migrator can grant privileges but cannot directly insert tenants.
+    await assert.rejects(() => isolated.exec(bootstrap),
+      e => e.code === '42501' && /permission denied for schema auth/.test(e.message));
+    assert.deepEqual((await isolated.query(snapshotSql)).rows, before, 'Failed audit rolls back the entire bootstrap');
+
+    // The previous USAGE-only repair still fails when function EXECUTE is missing.
+    await isolated.exec('set role pos_migrator');
+    await isolated.exec(usageOnly);
+    await isolated.exec('reset role');
+    await assert.rejects(() => isolated.exec(bootstrap),
+      e => e.code === '42501' && /permission denied for function uid/.test(e.message));
+    assert.deepEqual((await isolated.query(snapshotSql)).rows, before);
+
+    // Run as the same non-superuser installer, then repeat to model a manual SQL
+    // repair followed by CLI migration. Both executions must be additive.
+    await isolated.exec('set role pos_migrator');
+    await isolated.exec(repair);
+    await isolated.exec(repair);
+    await isolated.exec('reset role');
+    assert.deepEqual((await isolated.query(snapshotSql)).rows, before);
+    const { rows: grants } = await isolated.query(`select rolname,
+      has_schema_privilege(rolname,'auth','USAGE') as usage,
+      has_function_privilege(rolname,'auth.uid()','EXECUTE') as execute,
+      has_schema_privilege(rolname,'auth','CREATE') as create_schema,
+      has_table_privilege(rolname,'auth.users','SELECT') as read_users
+      from pg_roles where rolname in ('pos_identity','pos_writer','pos_auditor')`);
+    assert.equal(grants.length, 3);
+    for (const row of grants) {
+      assert.ok(row.usage && row.execute, row.rolname);
+      assert.ok(!row.create_schema && !row.read_users, row.rolname);
+    }
+
+    await isolated.exec(bootstrap);
+    await assert.rejects(() => isolated.exec(bootstrap), /Owner user already has an active organization membership/);
+    const [{ organization_id: org }] = await asUser(isolated, ownerId,
+      "select organization_id from public.organization_members where role='owner' and is_active");
+    const [{ id: category }] = await asUser(isolated, ownerId,
+      "insert into public.categories(organization_id,name) values ($1,'After repair') returning id", [org]);
+    const [{ actor_id: actor }] = await asUser(isolated, ownerId,
+      "select actor_id from public.audit_logs where table_name='categories' and record_id=$1", [category]);
+    assert.equal(actor, ownerId, 'Audit keeps the actual authenticated actor');
+    const [{ actor_id: bootstrapActor }] = (await isolated.query(
+      "select actor_id from public.audit_logs where table_name='organizations' and record_id=$1", [org])).rows;
+    assert.equal(bootstrapActor, null, 'SQL Editor bootstrap has no end-user JWT');
+    assert.deepEqual(await asUser(isolated, ownerId, 'select id from public.organizations where id=$1', [existingOrg]), []);
+    assert.deepEqual(await asUser(isolated, otherOwnerId, 'select id from public.audit_logs where organization_id=$1', [org]), []);
+    await denied(() => asUser(isolated, ownerId,
+      "insert into public.categories(organization_id,name) values ($1,'Cross-tenant write')", [existingOrg]));
+  } finally { await isolated.close(); }
+});
+
+test('hosted installer without Auth grant option runs the complete schema and all fixture RPCs', async () => {
+  const isolated = await migratedDatabase({ restrictedMigrator: true, authGrantAuthority: false });
+  try {
+    const { rows: [installer] } = await isolated.query(`select
+      has_schema_privilege('pos_migrator','auth','USAGE') as usage,
+      has_schema_privilege('pos_migrator','auth','USAGE WITH GRANT OPTION') as can_grant`);
+    assert.ok(installer.usage && !installer.can_grant);
+    const data = await fixture(isolated);
+    const { rows: roles } = await isolated.query(`select rolname,
+      has_schema_privilege(rolname,'auth','USAGE') as usage,
+      has_function_privilege(rolname,'private.request_user_id()','EXECUTE') as uid,
+      pg_has_role('pos_migrator',rolname,'USAGE') as installer_inherits,
+      pg_has_role('authenticated',rolname,'MEMBER') as browser_member
+      from pg_roles where rolname in ('pos_identity','pos_writer','pos_auditor')`);
+    for (const role of roles) {
+      assert.ok(!role.usage && role.uid, role.rolname);
+      assert.ok(!role.installer_inherits && !role.browser_member, role.rolname);
+    }
+    assert.equal((await data.query('cashier', 'select actor_id from public.audit_logs where record_id=$1', [data.order])).length, 0);
+    const { rows: [audit] } = await isolated.query("select actor_id from public.audit_logs where table_name='orders' and record_id=$1 and action='INSERT'", [data.order]);
+    assert.equal(audit.actor_id, data.users.cashier);
+    assert.deepEqual(await data.query('ownerB', 'select id from public.orders where organization_id=$1', [data.org]), []);
+    assert.deepEqual(await data.query('ownerB',
+      'update public.categories set name=$1 where organization_id=$2 returning id', ['Wrong tenant', data.org]), []);
+    await denied(() => data.rpc('cashier', 'set_member', { p_organization_id: data.org, p_user_id: data.users.cashier, p_role: 'owner' }));
+    await denied(() => data.rpc('ownerB', 'adjust_inventory', { p_organization_id: data.org, p_outlet_id: data.outlet, p_variant_id: data.variant, p_quantity: 1, p_reason: 'Foreign organization' }));
+
+    // Exercise the user's failing SQL Editor bootstrap with no JWT and no Auth
+    // schema grants on any internal role, after the complete migration chain.
+    const deployment = await readFile(new URL('../docs/DEPLOYMENT.md', import.meta.url), 'utf8');
+    const bootstrapMatch = deployment.match(/```sql\r?\n(DO \$\$[\s\S]*?)\r?\n```/);
+    assert.ok(bootstrapMatch);
+    const ownerId = randomUUID();
+    await isolated.query('insert into auth.users(id,email) values ($1,$2)', [ownerId, 'hosted-bootstrap@example.test']);
+    const bootstrap = bootstrapMatch[1].replace('OWNER_EMAIL', 'hosted-bootstrap@example.test');
+    await isolated.exec(bootstrap);
+    await assert.rejects(() => isolated.exec(bootstrap), /Owner user already has an active organization membership/);
+    const [member] = await asUser(isolated, ownerId,
+      "select organization_id from public.organization_members where user_id=$1 and role='owner' and is_active", [ownerId]);
+    assert.ok(member);
+    const { rows: [bootstrapAudit] } = await isolated.query(
+      "select actor_id from public.audit_logs where table_name='organizations' and record_id=$1", [member.organization_id]);
+    assert.equal(bootstrapAudit.actor_id, null, 'SQL Editor has no end-user JWT; never invent an audit actor');
+    assert.deepEqual(await data.query('ownerB', 'select id from public.organizations where id=$1', [member.organization_id]), []);
+  } finally { await isolated.close(); }
+});
+
+test('request identity forward repair preserves populated data, function grants, RLS and audit actors', async () => {
+  const isolated = await migratedDatabase({ restrictedMigrator: true, throughMigration: '20261017000200_auth_uid_permissions.sql' });
+  try {
+    const data = await fixture(isolated);
+    const repair = await readFile(new URL('../supabase/migrations/20261017000300_request_identity.sql', import.meta.url), 'utf8');
+    await isolated.exec(`set role pos_migrator;
+      create function public.unrelated_auth_reader() returns uuid language sql stable as $$select auth.uid()$$;
+      revoke usage on schema auth from pos_identity,pos_writer,pos_auditor;
+      reset role;
+      revoke grant option for usage on schema auth from pos_migrator;
+      revoke grant option for execute on function auth.uid() from pos_migrator cascade`);
+    const metadataSql = `select p.oid,p.proowner,p.proacl::text,p.prosecdef,p.proconfig,p.proargdefaults::text
+      from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+      where n.nspname in ('public','private') and p.prokind='f' order by p.oid`;
+    const functions = (await isolated.query(metadataSql)).rows;
+    const policies = (await isolated.query('select * from pg_policies order by schemaname,tablename,policyname')).rows;
+    const snapshotSql = `select (select jsonb_agg(b order by b.id) from public.inventory_balances b) balances,
+      (select jsonb_agg(m order by m.id) from public.inventory_movements m) movements,
+      (select jsonb_agg(a order by a.id) from public.audit_logs a) audit,
+      (select jsonb_agg(j order by j.id) from public.journal_entries j) entries,
+      (select jsonb_agg(l order by l.id) from public.journal_lines l) lines`;
+    const records = (await isolated.query(snapshotSql)).rows;
+    await isolated.exec('set role pos_migrator');
+    await isolated.exec(repair);
+    await isolated.exec(repair);
+    await isolated.exec('reset role');
+    assert.deepEqual((await isolated.query(metadataSql)).rows.filter(row => functions.some(f => f.oid === row.oid)), functions);
+    assert.deepEqual((await isolated.query('select * from pg_policies order by schemaname,tablename,policyname')).rows, policies);
+    assert.deepEqual((await isolated.query(snapshotSql)).rows, records);
+    const { rows: [unrelated] } = await isolated.query("select prosrc from pg_proc where oid='public.unrelated_auth_reader()'::regprocedure");
+    assert.match(unrelated.prosrc, /auth\.uid\(\)/);
+    const { rows: remaining } = await isolated.query(`select p.proname from pg_proc p join pg_roles r on r.oid=p.proowner
+      where r.rolname in ('pos_identity','pos_writer','pos_auditor') and strpos(p.prosrc,'auth.uid()')>0`);
+    assert.deepEqual(remaining, []);
+    const name = `After managed Auth repair ${randomUUID()}`;
+    const category = await data.insert('categories', { organization_id: data.org, name });
+    const { rows: [actor] } = await isolated.query("select actor_id from public.audit_logs where table_name='categories' and record_id=$1", [category]);
+    assert.equal(actor.actor_id, data.users.owner);
+    await denied(() => data.query('ownerB', "insert into public.categories(organization_id,name) values ($1,'Foreign category')", [data.org]));
+    assert.deepEqual(await data.query('outsider', 'select id from public.categories'), []);
+  } finally { await isolated.close(); }
+});
+
+test('request identity accepts only the request subject and fails closed on missing or malformed claims', async () => {
+  await db.exec('begin');
+  try {
+    const claim = async (claims, legacy = '') => {
+      await db.query("select set_config('request.jwt.claims',$1,true),set_config('request.jwt.claim.sub',$2,true)", [claims, legacy]);
+      return (await db.query('select private.request_user_id() as id')).rows[0].id;
+    };
+    assert.equal(await claim(''), null);
+    assert.equal(await claim('{}'), null);
+    assert.equal(await claim('{"sub":""}'), null);
+    assert.equal(await claim(JSON.stringify({ user_metadata: { sub: f.users.owner, role: 'owner' }, organization_id: f.org })), null);
+    assert.equal(await claim(JSON.stringify({ sub: f.users.cashier, user_metadata: { sub: f.users.owner } })), f.users.cashier);
+    assert.equal(await claim('', f.users.cashier), f.users.cashier);
+    assert.equal(await claim('{}', f.users.owner), null, 'Modern claims must not fall back to a stale legacy subject');
+    await assert.rejects(() => claim('{"sub":"not-a-uuid"}'), e => e.code === '22P02');
+  } finally { await db.exec('rollback'); }
+  await db.exec('begin');
+  try {
+    await db.query("select set_config('request.jwt.claims',$1,true)", ['not-json']);
+    await assert.rejects(() => db.query('select private.request_user_id()'), e => e.code === '22P02');
+  } finally { await db.exec('rollback'); }
+  await denied(() => asUser(db, f.users.cashier, 'select private.request_user_id()'));
+  await denied(() => asUser(db, null, 'select private.request_user_id()'));
 });

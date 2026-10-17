@@ -1,9 +1,6 @@
 import { BrowserRouter, HashRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import { lazy, Suspense, useEffect } from "react";
 import { AppShell } from "@/components/layout/app-shell";
-import { ModulePlaceholderPage } from "@/features/modules/module-placeholder-page";
-import { UIComponentsPage } from "@/features/ui-kit/ui-components-page";
-import { appRoutes } from "@/lib/navigation";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Badge } from "@/components/ui/badge";
 const ProductsPage = lazy(() => import("@/features/operations/products-page").then(module => ({ default: module.ProductsPage })));
@@ -44,7 +41,6 @@ function NotFoundPage() {
 }
 
 function RoutedApp() {
-  const placeholderRoutes = appRoutes.filter((route) => !["/", "/reports", "/ui-components", "/products", "/inventory", "/cashier", "/transactions", "/customers", "/finance"].includes(route.path));
   const useHashRouter = import.meta.env.VITE_USE_HASH_ROUTER === "true";
   const Router = useHashRouter ? HashRouter : BrowserRouter;
   const basename = useHashRouter ? "/" : import.meta.env.BASE_URL;
@@ -62,14 +58,6 @@ function RoutedApp() {
           <Route element={<TransactionsPage />} path="/transactions" />
           <Route element={<CustomersPage />} path="/customers" />
           <Route element={<FinancePage />} path="/finance" />
-          {placeholderRoutes.map((route) => (
-            <Route
-              element={<ModulePlaceholderPage />}
-              key={route.path}
-              path={route.path}
-            />
-          ))}
-          <Route element={<UIComponentsPage />} path="/ui-components" />
           <Route element={<NotFoundPage />} path="*" />
         </Route>
       </Routes></Suspense>

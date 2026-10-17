@@ -2,7 +2,7 @@ import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
-  variant?: "default" | "success" | "warning" | "danger" | "demo";
+  variant?: "default" | "success" | "warning" | "danger";
 };
 
 const variants = {
@@ -10,7 +10,6 @@ const variants = {
   success: "bg-success-soft text-success",
   warning: "bg-warning-soft text-warning",
   danger: "bg-danger-soft text-danger",
-  demo: "border border-primary bg-primary-soft text-primary",
 };
 
 export function Badge({

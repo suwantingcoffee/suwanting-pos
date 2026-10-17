@@ -3,6 +3,9 @@
 begin read only;
 select current_user, current_database(), version();
 select rolcreaterole, rolsuper, rolbypassrls from pg_roles where rolname = current_user;
+-- Hosted postgres may report false for Auth grant options: Auth is managed by
+-- Supabase. This is not a blocker once 20261017000300_request_identity.sql is
+-- applied. SELECT/REFERENCES/TRIGGER remain required for profile setup only.
 select has_schema_privilege(current_user, 'auth', 'USAGE WITH GRANT OPTION') as can_grant_auth_usage,
   has_function_privilege(current_user, 'auth.uid()', 'EXECUTE WITH GRANT OPTION') as can_grant_auth_uid,
   has_table_privilege(current_user, 'auth.users', 'SELECT') as can_backfill_profiles,

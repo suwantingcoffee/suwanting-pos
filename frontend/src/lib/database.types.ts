@@ -2139,6 +2139,7 @@ export type Database = {
       analytics_report: { Args: { p_organization_id: string; p_from: string; p_until: string; p_outlet_ids?: (string)[]; p_product_id?: string | null; p_category_id?: string | null; p_payment_method?: string; p_grain?: string; }; Returns: Json };
       approve_purchase_order: { Args: { p_purchase_order_id: string; }; Returns: undefined };
       archive_product: { Args: { p_product_id: string | null; }; Returns: undefined };
+      bootstrap_workspace: { Args: { p_organization_name?: string; p_outlet_name?: string; }; Returns: string };
       cancel_purchase_order: { Args: { p_purchase_order_id: string; }; Returns: undefined };
       checkout: { Args: { p_organization_id: string; p_outlet_id: string; p_shift_id: string; p_idempotency_key: string; p_items: Json; p_cash_account_id: string; p_customer_id?: string | null; p_promotion_code?: string | null; }; Returns: string };
       close_shift: { Args: { p_shift_id: string; p_closing_cash: number; }; Returns: undefined };

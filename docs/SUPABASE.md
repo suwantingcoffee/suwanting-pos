@@ -51,11 +51,17 @@ npm --prefix frontend run build
 ```
 
 Klien memakai PKCE, refresh sesi, dan storage key khusus `suwanting-pos-auth`.
-Tanpa kedua variabel, klien bernilai `null` dan tampilan DEMO tetap tersedia.
-Halaman `/products` dan `/inventory` menampilkan formulir login email/password,
+Tanpa kedua variabel, aplikasi menampilkan pesan konfigurasi dan tidak membuka
+workspace. Login email/password hanya tampil pada layar depan sebelum shell
+aplikasi dimuat.
+Halaman `/products` dan `/inventory` memakai sesi login yang sama,
 pilihan organisasi/outlet berdasarkan membership yang dapat dibaca, serta tombol
-keluar. Akun tanpa membership mendapat petunjuk setup. Login/role di UI tidak
-pernah dianggap bukti hak akses; setiap query/RPC diperiksa database.
+keluar. Pada database POS baru, login pertama menjalankan RPC
+`bootstrap_workspace` sekali: akun menjadi owner, organisasi `Suwanting Coffee`
+dan outlet `MAIN`/`Outlet Utama` dibuat atomik. Akun tanpa membership pada
+organisasi yang sudah ada tetap menunggu owner menambahkan akun melalui
+`set_member`; aplikasi tidak pernah memilih tenant secara otomatis. Login/role
+di UI tidak pernah dianggap bukti hak akses; setiap query/RPC diperiksa database.
 
 ### Akun dan workspace development pertama
 
@@ -64,27 +70,13 @@ pernah dianggap bukti hak akses; setiap query/RPC diperiksa database.
    Supabase pada proyek staging tersebut. UI signup dan pengelolaan member belum
    disediakan. Trigger Auth membuat profil tanpa mengambil role dari metadata.
 2. Jalankan frontend, buka `/products`, lalu masuk dengan akun tadi.
-3. Untuk organisasi development **baru**, jalankan contoh satu kali pada console
-   browser di Vite development. Import memakai sesi akun yang baru masuk; tidak
-   membutuhkan service-role key. Simpan `organizationId` jika pembuatan outlet
-   gagal agar dapat mengulang langkah outlet saja tanpa membuat organisasi baru.
+3. Pada database POS baru, tidak ada setup manual: login pertama menjalankan
+   `bootstrap_workspace`, membuat organisasi owner dan outlet utama secara atomik.
+   Muat ulang `/products` bila tab lama masih menampilkan state sebelum login.
 
-```js
-const { supabase } = await import('/src/lib/supabase.ts');
-if (!supabase) throw new Error('Konfigurasi Supabase belum diisi');
-const { data: organizationId, error: organizationError } = await supabase.rpc(
-  'create_organization', { p_name: 'Suwanting Coffee Development' }
-);
-if (organizationError) throw organizationError;
-const { data: outlet, error: outletError } = await supabase.from('outlets')
-  .insert({ organization_id: organizationId, code: 'MAIN', name: 'Outlet Utama' })
-  .select('id').single();
-if (outletError) throw outletError;
-console.log({ organizationId, outletId: outlet.id });
-```
-
-4. Muat ulang `/products`; akun menjadi owner organisasi yang baru dibuat dan
-   lokasi `MAIN` tersedia otomatis pada outlet. Isi satuan/kategori melalui UI
+4. Jika organisasi sudah ada, akun tanpa membership tetap menampilkan pesan
+   owner. Owner harus menambahkan akun lewat `set_member`; jangan memasukkan
+   membership langsung atau mengubah metadata Auth. Isi satuan/kategori melalui UI
    atau jalankan seed development opt-in di bawah. Mulai dari produk/varian,
    kemudian catat stok awal melalui Barang masuk dengan biaya yang benar.
 5. Buat akun Auth lain terlebih dahulu. Owner dapat memanggil `set_member` dengan
@@ -119,15 +111,20 @@ akun produksi.
 | `20261016001600_pos_queries_refunds.sql` | Katalog kasir, histori, resume, refund, void, immutable guards |
 | `20261016001700_finance_operations.sql` | Modal/pemasukan/aset idempoten, fee pinjaman, rekonsiliasi, reversal dan ringkasan keuangan |
 | `20261016001800_reporting.sql` | Agregasi laporan terotorisasi per periode, outlet, produk, kategori dan metode pembayaran |
+| `20261017000100_auth_schema_usage.sql` | Usage schema Auth minimum bagi role internal untuk helper `auth.uid()` |
+| `20261017000200_auth_uid_permissions.sql` | Grant Auth bila installer berwenang; deployment dilanjutkan ke perbaikan 003 bila grant tidak tersedia |
+| `20261017000300_request_identity.sql` | Identitas JWT untuk fungsi internal tanpa grant schema Auth; owner, grants dan RLS tetap dipertahankan |
+| `20261018000100_login_bootstrap.sql` | Bootstrap workspace owner/outlet pada login pertama database kosong |
 
 Semua file dibungkus transaksi. Tabel langsung memakai FORCE RLS dan pencabutan
 grants API pada migration pembuatannya, sehingga kegagalan migration berikutnya
 tetap menutup akses. Ini baseline untuk **proyek Supabase POS baru**,
 bukan skema situs Beta. Sebelum staging, jalankan `supabase/preflight.sql` secara
 read-only dan tinjau seluruh migration. Installer membutuhkan hak membuat schema
-dan role, SELECT/REFERENCES/TRIGGER pada `auth.users`, serta hak memberikan
-USAGE schema `auth` dan EXECUTE `auth.uid()` kepada role fungsi. Preflight
-menampilkan hak-hak tersebut tanpa mengubahnya. Nama tabel, schema `private`, atau role
+dan role, SELECT/REFERENCES/TRIGGER pada `auth.users`. Role `postgres` hosted
+dapat tidak memiliki grant option untuk schema `auth`; migration 003 menghapus
+ketergantungan Auth bagi pemilik fungsi internal. Preflight menampilkan hak-hak
+tersebut tanpa mengubahnya. Nama tabel, schema `private`, atau role
 yang bertabrakan membuat instalasi gagal; migration sengaja tidak memakai
 `IF NOT EXISTS` untuk menyembunyikan skema yang berbeda. Tabel di luar daftar POS
 tidak diubah; tes mempertahankan baris, grants, dan RLS tabel yang tidak terkait.
@@ -189,9 +186,16 @@ perubahan susunan bahan melalui `save_recipe` meningkatkan versi, sementara
 konsumsi/produksi selesai mempertahankan snapshot.
 Arsip outlet mempertahankan akses baca riwayat, tetapi menolak transaksi baru.
 
-Helper `private.has_role`, `can_access`, `can_view_outlet` memakai `auth.uid()` dan
+Helper `private.has_role`, `can_access`, `can_view_outlet` memakai `private.request_user_id()` dan
 membership aktif dari database. `organization_id` pada request hanya pemilih
-data; tidak memberikan izin. Helper identitas dimiliki `pos_identity`, membaca
+data; tidak memberikan izin. `private.request_user_id()` hanya membaca subject
+dari `request.jwt.claims` yang dipasang gateway setelah verifikasi JWT; helper
+ini sendiri tidak memverifikasi tanda tangan token. Claim lama
+`request.jwt.claim.sub` hanya dipakai bila claim modern tidak tersedia. Metadata
+pengguna tidak dipakai, dan browser tidak mendapat EXECUTE langsung pada helper.
+SQL Editor tanpa JWT menghasilkan NULL untuk aktor audit. Akun SQL/DBA tetap
+dipercaya karena dapat mengatur variabel sesi; jangan memberi akses SQL atau RPC
+pengubah claim ke pengguna aplikasi. Helper otorisasi dimiliki `pos_identity`, membaca
 tabel membership dengan policy internal sederhana sehingga tidak memanggil policy
 itu sendiri. RPC dimiliki `pos_writer`; audit dimiliki `pos_auditor`. Ketiga role
 NOLOGIN, NOBYPASSRLS, tidak memiliki SUPERUSER/CREATEROLE/CREATE schema, dan tidak
@@ -251,7 +255,7 @@ expense, loan/payment dan buka shift belum mempunyai kontrak retry idempoten;
 jangan mengulangnya otomatis setelah timeout tanpa memeriksa hasil. Detail retry
 formulir ada di [PRODUCTS_INVENTORY.md](PRODUCTS_INVENTORY.md).
 
-Audit merekam actor dari Auth, tabel, record ID, aksi, organisasi/outlet dan waktu;
+Audit merekam actor dari subject JWT yang diverifikasi gateway, tabel, record ID, aksi, organisasi/outlet dan waktu;
 tidak menyalin token, password, PII, atau seluruh isi finansial. Audit, jurnal,
 stok movement, kas movement, dan dokumen final tidak dapat diperbarui/dihapus
 melalui browser. Koreksi memakai transaksi kompensasi. Constraint deferred menjaga

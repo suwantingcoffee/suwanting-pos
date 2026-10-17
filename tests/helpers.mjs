@@ -2,7 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { readFile, readdir } from 'node:fs/promises';
 
 export const root = new URL('../', import.meta.url);
-export async function migratedDatabase({ restrictedMigrator = false, onMigration, database } = {}) {
+export async function migratedDatabase({ restrictedMigrator = false, authGrantAuthority = true, throughMigration, onMigration, database } = {}) {
   const db = database ?? new PGlite();
   // Only the harness emulates Supabase Auth. Production migrations never create
   // or replace auth.users/auth.uid or API roles supplied by Supabase.
@@ -31,8 +31,8 @@ export async function migratedDatabase({ restrictedMigrator = false, onMigration
     await db.exec(`alter database "${database.name.replaceAll('"', '""')}" owner to pos_migrator`);
     await db.exec(`
       alter schema public owner to pos_migrator;
-      grant usage on schema auth to pos_migrator with grant option;
-      grant execute on function auth.uid() to pos_migrator with grant option;
+      grant usage on schema auth to pos_migrator ${authGrantAuthority ? 'with grant option' : ''};
+      grant execute on function auth.uid() to pos_migrator ${authGrantAuthority ? 'with grant option' : ''};
       grant select, references, trigger on auth.users to pos_migrator;
       set role pos_migrator;
       alter default privileges in schema public grant all on tables to anon, authenticated;
@@ -40,6 +40,7 @@ export async function migratedDatabase({ restrictedMigrator = false, onMigration
   }
   const dir = new URL('supabase/migrations/', root);
   for (const file of (await readdir(dir)).filter(f => f.endsWith('.sql')).sort()) {
+    if (throughMigration && file > throughMigration) break;
     try { await db.exec(await readFile(new URL(file, dir), 'utf8')); }
     catch (error) { throw new Error(`Migration ${file}: ${error.message}`, { cause: error }); }
     if (onMigration) await onMigration(db, file);

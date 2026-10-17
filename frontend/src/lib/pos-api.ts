@@ -26,6 +26,11 @@ export async function getMyMemberships() {
   return data;
 }
 
+/** Provision first workspace on a new database; existing tenants never auto-assign. */
+export async function bootstrapWorkspace(organizationName = "Suwanting Coffee", outletName = "Outlet Utama") {
+  return rpc("bootstrap_workspace", { p_organization_name: organizationName, p_outlet_name: outletName });
+}
+
 // The selected organization/outlet are selectors, never proof of authorization.
 // Persist this UUID with the cart until a retry succeeds after a network error.
 export async function checkout(args: CheckoutArgs) {
