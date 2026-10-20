@@ -1,0 +1,10 @@
+@extends('layouts.app')
+@section('title','Product & Menu')
+@section('content')
+<div class="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p class="eyebrow">KATALOG TOKO</p><h1 class="page-title">Produk & menu</h1><p class="mt-2 text-sm text-stone-500">Harga dan status yang tampil di kasir.</p></div><x-button :href="route('products.create')"><i data-lucide="plus" class="size-4"></i>Tambah produk</x-button></div>
+<section class="card !p-0"><form class="flex flex-wrap items-center gap-3 border-b border-stone-100 p-5 dark:border-stone-800"><input class="field max-w-sm" name="q" value="{{ request('q') }}" placeholder="Cari nama atau SKU…"><x-button type="submit" variant="secondary">Cari</x-button></form>
+<x-table><thead><tr><th>Produk</th><th>Kategori</th><th>Harga jual</th><th>SKU</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
+@forelse($products as $product)<tr><td><div class="font-semibold">{{ $product->name }}</div><p class="mt-1 text-xs text-stone-500">{{ $product->description }}</p></td><td>{{ $product->category->name }}</td><td class="font-semibold">@money($product->selling_price)</td><td class="font-mono text-xs">{{ $product->sku }}</td><td><x-badge :status="$product->is_active?'active':'inactive'">{{ $product->is_active?'Aktif':'Nonaktif' }}</x-badge></td><td><div class="flex gap-2"><x-button :href="route('products.edit',$product)" variant="secondary" class="!p-2" aria-label="Edit"><i data-lucide="pencil" class="size-4"></i></x-button><form method="POST" action="{{ route('products.destroy',$product) }}" data-confirm="Arsipkan produk ini? Riwayat transaksi tetap disimpan.">@csrf @method('DELETE')<x-button variant="danger" class="!p-2" aria-label="Arsipkan"><i data-lucide="archive" class="size-4"></i></x-button></form></div></td></tr>
+@empty<tr><td colspan="6"><x-empty title="Belum ada produk" description="Tambahkan menu pertama untuk menampilkannya di kasir."><x-button :href="route('products.create')" class="mt-4">Tambah produk</x-button></x-empty></td></tr>@endforelse</tbody></x-table>
+<div class="p-5">{{ $products->links() }}</div></section>
+@endsection

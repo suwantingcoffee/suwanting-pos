@@ -1,0 +1,15 @@
+@extends('layouts.app')
+@section('title','Dashboard')
+@section('content')
+<div class="mb-7 flex flex-wrap items-center justify-between gap-4"><div><p class="eyebrow">RINGKASAN TOKO</p><h1 class="page-title">Hari baik dimulai dari kopi.</h1><p class="mt-2 text-sm text-stone-500">{{ auth()->user()->role==='cashier'?'Ringkasan penjualanmu hari ini.':'Pantau penjualan dan aktivitas toko hari ini.' }}</p></div><x-button :href="route('pos.index')"><i data-lucide="plus" class="size-4"></i>Pesanan baru</x-button></div>
+<div class="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+@foreach([['Penjualan hari ini',\App\Services\Money::format($salesTotal),'wallet','Lunas'],['Transaksi hari ini',$saleCount,'receipt-text','Pesanan dibayar'],['Menunggu pembayaran',$pending,'clock','Semua tanggal'],['Produk aktif',$productCount,'package','Siap ditawarkan']] as [$label,$value,$icon,$note])
+<article class="card"><div class="flex justify-between gap-3"><p class="text-sm text-stone-500">{{ $label }}</p><span class="rounded-xl bg-orange-50 p-2.5 text-brand dark:bg-orange-950/40"><i data-lucide="{{ $icon }}" class="size-5"></i></span></div><p class="mt-3 text-3xl font-semibold tracking-tight">{{ $value }}</p><p class="mt-3 text-xs text-stone-400">{{ $note }}</p></article>@endforeach
+</div>
+<div class="mb-6 grid gap-6 xl:grid-cols-3"><section class="card xl:col-span-2"><div class="flex items-center justify-between"><div><h2 class="font-semibold">Ritme penjualan</h2><p class="mt-1 text-xs text-stone-500">Tujuh hari terakhir · transaksi lunas</p></div><x-badge>7 hari</x-badge></div>
+@php($max=max(1,(float)$weekly->max('total')))
+<div class="mt-8 flex h-52 items-end justify-around gap-3" role="img" aria-label="Grafik penjualan tujuh hari terakhir">@foreach($weekly as $day)<div class="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2"><span class="max-w-full truncate text-[10px] text-stone-400">@money($day['total'])</span><div class="w-full max-w-14 rounded-t-lg bg-brand/85" style="height:{{ max(2,($day['total']/$max)*140) }}px"></div><span class="text-xs text-stone-500">{{ $day['label'] }}</span></div>@endforeach</div></section>
+<section class="card"><h2 class="font-semibold">Metode pembayaran</h2><p class="mt-1 text-xs text-stone-500">Penjualan lunas hari ini</p><div class="mt-5 grid gap-5">@foreach($methods as $method)<div class="flex items-center justify-between gap-2 border-b border-stone-100 pb-4 dark:border-stone-800"><span class="text-xs text-stone-500">{{ $method['name'] }}</span><strong class="text-sm">@money($method['total'])</strong></div>@endforeach</div></section></div>
+<section class="card !p-0"><div class="flex items-center justify-between p-5"><div><h2 class="font-semibold">Transaksi terbaru</h2><p class="mt-1 text-xs text-stone-500">Cerita yang baru saja tercatat</p></div><a href="{{ route('transactions.index') }}" class="text-xs font-semibold text-brand">Lihat semua</a></div>
+@include('transactions.table',['sales'=>$recent])</section>
+@endsection

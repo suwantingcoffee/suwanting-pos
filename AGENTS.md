@@ -1,163 +1,148 @@
-# Panduan Proyek Suwanting POS
+<laravel-boost-guidelines>
+=== foundation rules ===
 
-## Hasil audit dan kondisi awal
+# Laravel Boost Guidelines
 
-- Folder ini sebelumnya kosong: belum ada halaman, source code, `package.json`,
-  routing, database, atau fitur POS yang dapat dipertahankan maupun dijalankan.
-- Sebagai referensi kebutuhan produk saja, sibling `Suwanting Coffe Beta v.1`
-  berisi situs statis HTML/CSS/JavaScript: `index.html`, `product.html`, dan
-  `admin.html`, tanpa React, TypeScript, Vite, router, atau tes otomatis.
-- Situs referensi menyediakan katalog cadangan empat kopi, filter kategori,
-  detail produk, pilihan ukuran 100 g–1 kg dan gilingan, keranjang, serta
-  checkout melalui WhatsApp. Keranjang memakai `localStorage` key
-  `suwanting-cart`, berisi objek berindeks `id|ukuran|gilingan` dengan field
-  `id`, `size`, `grind`, dan `qty`.
-- Situs referensi juga memiliki edukasi/panduan seduh, FAQ, informasi order,
-  placeholder Journey, serta integrasi Supabase opsional untuk produk/konten
-  publik, login admin, CRUD, publikasi, dan unggah gambar.
-- Skema referensi mendefinisikan `products` dan `site_content` dengan RLS.
-  Tidak ditemukan tabel order/transaksi, status pesanan, pembayaran, atau stok.
-  Konten Journey masih placeholder dan konfigurasi Supabase frontend berada
-  pada source statis.
-- Karena POS ini proyek terpisah dan masih kosong, fondasi di sini tidak
-  mengubah, memindahkan, atau menggantikan satu pun file proyek referensi.
+## Foundational Context
 
-### Yang sudah berfungsi dan yang belum
+This application is a Laravel application running on PHP 8.4. Always use the APIs that match the installed major version of each package — do not assume a version.
 
-- **Di POS ini:** frontend React dan backend Supabase tersedia: 48 tabel,
-  migration terurut, RLS, fungsi transaksi, audit/jurnal, tipe database, dan tes
-  beberapa pengguna/organisasi. UI produk/inventori sudah terhubung, termasuk
-  PO, resep, roasting/produksi, lokasi, CSV, dan autentikasi. UI kasir/transaksi
-  sudah terhubung untuk hold/resume, split payment, settlement manual,
-  refund/void, dan struk. Pelanggan kini terhubung dengan akses berbasis role
-  dan pengarsipan yang mempertahankan transaksi. Keuangan kini terhubung untuk
-  pencatatan, jurnal double-entry, rekonsiliasi, dan audit. Dashboard dan laporan
-  terhubung ke agregasi Supabase. Pengelolaan pengguna/membership dan pengaturan
-  masih placeholder; UI kit juga bukan modul operasional.
-- **Di situs referensi:** katalog, detail, keranjang browser, handoff WhatsApp,
-  halaman/konten publik, dan admin Supabase adalah fitur yang tersedia untuk
-  dipelajari, bukan implementasi POS di folder ini.
-- **Belum tersedia pada referensi:** order tersimpan, pembayaran, pelacakan
-  order, inventori, akun pelanggan, ongkir terintegrasi, dan harga kemasan
-  selain 100 g.
-- **Risiko migrasi:** keranjang browser bukan order dan tersimpan per browser;
-  belum ada model transaksi atau versi migrasi database; kompatibilitas ID,
-  status publikasi, RLS, dan referensi gambar perlu dijaga. Jangan menyamakan
-  katalog dengan inventori atau menganggap handoff WhatsApp sebagai checkout
-  yang persisten.
+Before relying on a package's API, confirm its installed version:
+- PHP packages: run `composer show --direct` to list direct dependencies with versions, or `composer show <vendor/package>` for a single package.
+- JS packages: check `package.json` for the installed versions.
 
-## Arsitektur target
+## Skills Activation
 
-- Aplikasi POS baru berada di `frontend/`: React + TypeScript strict + Vite,
-  Tailwind CSS, komponen shadcn/ui berbasis source, React Router, Lucide React,
-  dan Supabase JS.
-- `frontend/src/app.tsx` adalah shell awal; `frontend/src/features/` untuk
-  domain POS; `frontend/src/components/` untuk komponen bersama; dan
-  `frontend/src/lib/` untuk klien/integrasi, utilitas, serta tipe database.
-- `supabase/migrations/` menyimpan baseline POS baru. Jangan menerapkannya pada
-  skema Beta atau mereset database berisi data untuk mengatasi collision.
-- `frontend/src/lib/database.types.ts` dihasilkan dari migration dengan
-  `npm run types` pada root. Jangan mengedit tipe hasil generator secara manual.
-  `docs/SUPABASE.md` menjelaskan hak akses, RPC, lingkup, dan prosedur instalasi;
-  `docs/TEST_RESULTS.md` mencatat hasil aktual dan pemeriksaan yang belum dijalankan.
-- `.env.local` menyimpan konfigurasi Supabase lokal. Produk, inventori, POS,
-  keuangan, dashboard, dan laporan menggunakan Supabase; jangan menambahkan
-  rahasia server ke bundle/browser.
-- `npm test` pada root menguji database sementara dan propagasi error klien.
-  `npm run test:supabase` memerlukan stack Supabase lokal dan public key khusus
-  tes; hasil skip bukan bukti lulus. Jangan memakai hosted URL untuk fixture tes.
-- `npm run test:concurrency` membuat PostgreSQL native sementara di workspace,
-  menggunakan port acak localhost, lalu shutdown dan membersihkan direktori run.
-  `npm run test:ui` memakai Chrome lokal dengan respons API tiruan. Keduanya
-  melengkapi tes PGlite dan tidak menggantikan verifikasi gateway Supabase.
-- Migration 007–013 menambahkan model lokasi/biaya/unit, operasi atomik dan UI
-  katalog/inventori. Baseline 001–006 tidak diubah. Detail kontrak, mode konsumsi,
-  biaya stok warisan dan batas retry ada di `docs/PRODUCTS_INVENTORY.md`.
+This project has domain-specific skills available in `**/skills/**`. You MUST activate the relevant skill whenever you work in that domain—don't wait until you're stuck.
 
-## Urutan implementasi dan migrasi
+## Conventions
 
-1. **Fondasi:** scaffold React/TypeScript/Vite, routing, token Tailwind/shadcn,
-   dashboard DEMO, UI kit, state loading/error, dan klien Supabase opsional.
-   Belum membangun alur POS atau mengubah data.
-2. **Definisi POS:** sepakati aktor, alur kasir, outlet, produk/varian, stok,
-   harga, diskon, metode pembayaran, penutupan kas, serta kebutuhan offline.
-   Dokumentasikan batas keuangan, privasi, dan model akses.
-3. **Model data dan otorisasi:** rancang skema POS/migrasi Supabase terversi,
-   constraint/transaksi atomik, RLS, role, audit log, backup, dan strategi
-   rekonsiliasi. Tulis tes kebijakan dan migrasi sebelum menyambungkan UI.
-4. **Master data:** implementasikan autentikasi berotorisasi, outlet, produk,
-   harga, serta inventori sesuai model yang telah disetujui.
-5. **Transaksi kasir:** keranjang POS, validasi harga/stok di server, order
-   idempoten, pembayaran, pembatalan/refund bila disepakati, dan audit.
-6. **Operasional:** riwayat order, laporan/penutupan kas, hak akses, error
-   recovery, aksesibilitas, dan pengujian integrasi/end-to-end.
-7. **Adopsi data lama (opsional):** hanya jika migrasi dari situs Beta diminta.
-   Inventaris sumber dan pemetaan dahulu; ekspor/backup; validasi, dry run,
-   ringkasan perubahan, impor idempoten, pemeriksaan hasil, dan rollback.
-   Jangan hapus atau menimpa key `suwanting-cart`; jangan konversi cart menjadi
-   order, pelanggan, transaksi, atau stok tanpa persetujuan dan konfirmasi.
-8. **Rilis:** staging, uji RLS/keuangan, rekonsiliasi, monitoring, persetujuan
-   pengguna, backup teruji, dan rencana rollback sebelum produksi.
+- You must follow all existing code conventions used in this application. When creating or editing a file, check sibling files for the correct structure, approach, and naming.
+- Use descriptive names for variables and methods. For example, `isRegisteredForDiscounts`, not `discount()`.
+- Check for existing components to reuse before writing a new one.
 
-### Ketentuan migrasi data
+## Verification Scripts
 
-- Data lama tetap utuh dan tidak disentuh selama fondasi ini.
-- Sumber browser harus dibaca secara read-only saat tahap migrasi; validasi
-  JSON, key, ID produk, ukuran, gilingan, dan jumlah, serta tampilkan pratinjau
-  sebelum tindakan pengguna.
-- Buat backup yang dapat dipulihkan. Migrasi gagal tidak boleh menghapus atau
-  menimpa sumber. Tandai migrasi berhasil hanya setelah jumlah dan isi hasil
-  diverifikasi.
-- Jangan mengimpor data konfigurasi/akun/kredensial lama ke POS. Kunci anon
-  publik bukan rahasia; service-role key dan password tidak boleh masuk frontend.
+- Do not create verification scripts or tinker when tests cover that functionality and prove they work. Unit and feature tests are more important.
 
-## Aturan coding dan kualitas
+## Application Structure & Architecture
 
-- Gunakan TypeScript strict, tipe domain eksplisit, validasi input dan respons
-  backend. Hindari `any`, assertion tak berdasar, dan duplikasi model.
-- Pisahkan komponen UI, aturan domain POS, dan akses database. Server/database
-  tetap sumber kebenaran untuk role, harga, stok, dan status transaksi.
-- Jangan menganggap pemeriksaan role di UI sebagai kontrol akses. RLS,
-  constraint, dan operasi atomik harus menegakkan otorisasi/integritas.
-- Render data remote sebagai teks; jangan memasukkan konten mentah melalui
-  `innerHTML`. Laporkan kegagalan penyimpanan/jaringan secara eksplisit.
-- Setiap perubahan perilaku menyertakan tes kasus normal, input invalid, serta
-  kegagalan jaringan/penyimpanan. Jalankan `npm run typecheck`, tes relevan,
-  dan `npm run build`.
-- Hindari perubahan tak terkait. Perbarui dokumentasi dan migrasi database yang
-  relevan bersama perubahan arsitektur.
+- Stick to existing directory structure; don't create new base folders without approval.
+- Do not change the application's dependencies without approval.
 
-## Design system
+## Frontend Bundling
 
-- Mobile-first dengan light mode `#FFF9F4`, surface `#FFFFFF`, primary
-  `#F28C28`/hover `#E87917`, primary-soft `#FFF0DF`, text `#302B27`,
-  secondary `#81766D`, dan border `#F0E6DD`. Dark mode memakai background
-  `#171615`, surface `#211F1D`, elevated `#2A2724`, primary `#FFA64D`, text
-  `#F7F2ED`, secondary `#B5AAA0`, dan border `#3A3530`.
-- Gunakan Poppins, sudut 12–20px, bayangan tipis, dan spacing konsisten. Token
-  CSS yang sama menggerakkan kedua tema dan utilitas Tailwind.
-- Prioritaskan kontras, fokus keyboard, label dan kontrol semantik, target sentuh
-  nyaman, reduced motion, serta tampilan kasir yang responsif.
+- If a frontend change doesn't show in the UI or you get a "Unable to locate file in Vite manifest" error, run `npm run build` or ask the user to run `npm run dev` or `composer run dev`.
 
-## Standar keamanan
+## Documentation Files
 
-- Gunakan hanya Supabase URL dan public anon/publishable key di frontend.
-  Dilarang mengirim service-role key, database password, atau kredensial privat
-  ke source, contoh env, bundle, log, atau klien.
-- Simpan konfigurasi lokal pada `.env.local` yang diabaikan Git. Validasi URL
-  Supabase dan input sebelum menggunakannya.
-- Terapkan RLS minimum-privilege pada tabel dan storage. Data POS/keuangan
-  memerlukan akses berdasarkan role dan outlet yang diverifikasi di backend.
-- Jangan mencatat password, token, atau data pelanggan/keuangan sensitif.
-  Tetapkan retensi dan privasi sebelum menambahkan data pelanggan.
+- You must only create documentation files if explicitly requested by the user.
 
-## Perintah frontend
+=== boost rules ===
 
-Jalankan dari `frontend/`:
+# Laravel Boost
 
-```powershell
-npm install
-npm run dev
-npm run typecheck
-npm run build
-```
+## Tools
+
+- Laravel Boost is an MCP server with tools designed specifically for this application. Prefer Boost tools over manual alternatives like shell commands or file reads.
+- Use `database-query` to run read-only queries against the database instead of writing raw SQL in tinker.
+- Use `database-schema` to inspect table structure before writing migrations or models.
+- Use `get-absolute-url` to resolve the correct scheme, domain, and port for project URLs. Always use this before sharing a URL with the user.
+- Use `browser-logs` to read browser logs, errors, and exceptions. Only recent logs are useful, ignore old entries.
+
+## Searching Documentation (IMPORTANT)
+
+- Use `search-docs` before changes that depend on Laravel ecosystem APIs, behavior, configuration, or version-specific syntax. Skip it for copy-only edits and other changes where package documentation is irrelevant. Reuse sufficient results already in context instead of searching again.
+- Pass a `packages` array to scope results when you know which packages are relevant.
+- Use multiple broad, topic-based queries: `['rate limiting', 'routing rate limiting', 'routing']`. Expect the most relevant results first.
+- Do not add package names to queries because package info is already shared. Use `test resource table`, not `filament 4 test resource table`.
+
+### Search Syntax
+
+1. Use words for auto-stemmed AND logic: `rate limit` matches both "rate" AND "limit".
+2. Use `"quoted phrases"` for exact position matching: `"infinite scroll"` requires adjacent words in order.
+3. Combine words and phrases for mixed queries: `middleware "rate limit"`.
+4. Use multiple queries for OR logic: `queries=["authentication", "middleware"]`.
+
+## Project Rules
+
+- This project contains committed, area-grouped rules in `.ai/rules` when that directory exists, including path-scoped framework guidelines under `.ai/rules/boost`. Before you enter plan mode or create/edit any file, you MUST first: open @.ai/rules/index.md (it maps file globs to rule files), read every rule file whose globs cover the path(s) in scope, and run `grep -rin 'keyword' .ai/rules` to catch what a path match alone misses. Do not write code until you have read and are following every matching rule. If `.ai/rules` does not exist, continue without it.
+
+## Artisan
+
+- Run Artisan commands directly via the command line (e.g., `php artisan route:list`). Use `php artisan list` to discover available commands and `php artisan [command] --help` to check parameters.
+- Inspect routes with `php artisan route:list`. Filter with: `--method=GET`, `--name=users`, `--path=api`, `--except-vendor`, `--only-vendor`.
+- Read configuration values using dot notation: `php artisan config:show app.name`, `php artisan config:show database.default`. Or read config files directly from the `config/` directory.
+
+## Tinker
+
+- Execute PHP in app context for debugging and testing code. Do not create models without user approval, prefer tests with factories instead. Prefer existing Artisan commands over custom tinker code.
+- Always use single quotes to prevent shell expansion: `php artisan tinker --execute 'Your::code();'`
+  - Double quotes for PHP strings inside: `php artisan tinker --execute 'User::where("active", true)->count();'`
+
+=== php rules ===
+
+# PHP
+
+- Always use curly braces for control structures, even for single-line bodies.
+- Use PHP 8 constructor property promotion: `public function __construct(public GitHub $github) { }`. Do not leave empty zero-parameter `__construct()` methods unless the constructor is private.
+- Use explicit return type declarations and type hints for all method parameters: `function isAccessible(User $user, ?string $path = null): bool`
+- Use TitleCase for Enum keys: `FavoritePerson`, `BestLake`, `Monthly`.
+- Prefer PHPDoc blocks over inline comments. Only add inline comments for exceptionally complex logic.
+- Use array shape type definitions in PHPDoc blocks.
+
+=== deployments rules ===
+
+# Deployment
+
+- Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
+- Activate the `deploying-to-cloud` skill whenever deploying to Laravel Cloud, configuring Cloud environments or resources, using the Cloud CLI, or troubleshooting Cloud deployments.
+
+=== laravel/core rules ===
+
+# Do Things the Laravel Way
+
+- Use `php artisan make:` commands to create new files (i.e. migrations, controllers, models, etc.). You can list available Artisan commands using `php artisan list` and check their parameters with `php artisan [command] --help`.
+- If you're creating a generic PHP class, use `php artisan make:class`.
+- Pass `--no-interaction` to all Artisan commands to ensure they work without user input. You should also pass the correct `--options` to ensure correct behavior.
+
+### Model Creation
+
+- When creating new models, create useful factories and seeders for them too. Ask the user if they need any other things, using `php artisan make:model --help` to check the available options.
+
+## APIs & Eloquent Resources
+
+- For APIs, default to using Eloquent API Resources and API versioning unless existing API routes do not, then you should follow existing application convention.
+
+## URL Generation
+
+- When generating links to other pages, prefer named routes and the `route()` function.
+
+## Testing
+
+- When creating models for tests, use the factories for the models. Check if the factory has custom states that can be used before manually setting up the model.
+- Faker: Use methods such as `$this->faker->word()` or `fake()->randomDigit()`. Follow existing conventions whether to use `$this->faker` or `fake()`.
+- When creating tests, make use of `php artisan make:test [options] {name}` to create a feature test, and pass `--unit` to create a unit test. Most tests should be feature tests.
+
+=== pint/core rules ===
+
+# Laravel Pint Code Formatter
+
+- If you have modified any PHP files, you must run `vendor/bin/pint --dirty --format agent` before finalizing changes to ensure your code matches the project's expected style.
+- Do not run `vendor/bin/pint --test --format agent`, simply run `vendor/bin/pint --format agent` to fix any formatting issues.
+
+=== phpunit/core rules ===
+
+# PHPUnit
+
+- This project uses PHPUnit. Create tests with `php artisan make:test --phpunit {name}`.
+- Do not include the test suite directory in `{name}`. Use `SomeFeatureTest`, not `Feature/SomeFeatureTest`.
+- Read the `testing-best-practices` skill for guidance on coverage, naming, structure, dependency isolation, and review.
+
+## Running Tests
+
+- Run the narrowest set of tests that covers the change. Pass a file path or `--filter=testName` to `php artisan test --compact`.
+- Rerun a test after each change to it.
+- Run `vendor/bin/phpunit` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
+
+</laravel-boost-guidelines>

@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+@source '../../resources/views';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@theme {
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+    --color-brand: #f28500;
+    --color-ink: #202020;
+}
+@custom-variant dark (&:where(.dark, .dark *));
+@layer base {
+    :root { color-scheme: light; }
+    :root.dark { color-scheme: dark; }
+    body { @apply bg-stone-50 text-stone-900 antialiased dark:bg-[#202020] dark:text-stone-100; }
+    th { @apply whitespace-nowrap border-b border-stone-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-stone-500 dark:border-stone-700; }
+    td { @apply border-b border-stone-100 px-4 py-3 dark:border-stone-800; }
+    table { @apply w-full text-left text-sm; }
+    button { @apply cursor-pointer disabled:cursor-wait disabled:opacity-50; }
+    button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 2px solid #f28500; outline-offset: 3px; }
+    dialog:open { margin: auto; }
+}
+@layer components {
+    .card { @apply rounded-2xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-900; }
+    .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition; }
+    .btn-primary { @apply bg-[#f28500] text-white hover:bg-orange-600; }
+    .btn-secondary { @apply border border-stone-300 bg-white text-stone-800 hover:border-[#f28500] dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100; }
+    .btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
+    .field { @apply w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#f28500] focus:ring-2 focus:ring-orange-100 dark:border-stone-700 dark:bg-stone-800 dark:focus:ring-orange-950; }
+    .badge { @apply inline-flex rounded-full px-2.5 py-1 text-xs font-semibold; }
+    .table-wrap { @apply overflow-x-auto; }
+    .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-600 hover:bg-orange-50 hover:text-[#f28500] dark:text-stone-300 dark:hover:bg-stone-800; }
+    .nav-link.active { @apply bg-orange-50 text-[#f28500] dark:bg-orange-950/40; }
+    .eyebrow { @apply mb-2 text-[10px] font-semibold tracking-[.2em] text-brand; }
+    .page-title { @apply text-2xl font-semibold tracking-tight md:text-3xl; }
+    .chip { @apply shrink-0 rounded-xl border border-stone-200 px-4 py-2 text-xs font-medium dark:border-stone-700; }
+    .product-art { @apply relative flex h-40 items-center justify-center overflow-hidden bg-[#f2e7da] dark:bg-[#3c3027]; background-image: radial-gradient(circle at 50% 130%,#ffffff77 0 40%,transparent 41%); }
+    .product-art.art-beans { @apply bg-[#dfe6d8] dark:bg-[#283c2b]; }
+    .product-art.art-food { @apply bg-[#f2dfc5] dark:bg-[#443420]; }
+    .qty-button { @apply flex size-9 items-center justify-center rounded-lg border border-stone-200 text-base hover:bg-orange-50 dark:border-stone-700 dark:hover:bg-stone-800; }
+}
+[x-cloak] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }

@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('title','Audit aktivitas')
+@section('content')
+<div class="mb-7"><p class="eyebrow">JEJAK PERUBAHAN</p><h1 class="page-title">Audit aktivitas</h1><p class="mt-2 text-sm text-stone-500">Perubahan sensitif tersimpan untuk penelusuran.</p></div><section class="card !p-0"><form class="border-b border-stone-100 p-5 dark:border-stone-800"><input class="field max-w-sm" name="q" value="{{ request('q') }}" placeholder="Cari aksi…"></form><x-table><thead><tr><th>Waktu</th><th>Pengguna</th><th>Aksi</th><th>Objek</th><th>IP</th></tr></thead><tbody>@forelse($logs as $log)<tr><td class="text-xs">{{ $log->created_at->format('d M Y H:i:s') }}</td><td>{{ $log->user?->name??'Sistem' }}</td><td class="font-mono text-xs">{{ $log->action }}</td><td class="text-xs">{{ class_basename($log->auditable_type) }} #{{ $log->auditable_id }}</td><td class="font-mono text-xs">{{ $log->ip_address }}</td></tr>@empty<tr><td colspan="5"><x-empty title="Belum ada aktivitas"/></td></tr>@endforelse</tbody></x-table><div class="p-5">{{ $logs->links() }}</div></section>
+@endsection
