@@ -1,6 +1,0 @@
-@extends('layouts.app')
-@section('title','Pengguna')
-@section('content')
-<div class="mb-7 flex items-end justify-between gap-4"><div><p class="eyebrow">AKSES TOKO</p><h1 class="page-title">Pengguna</h1><p class="mt-2 text-sm text-stone-500">Owner mengatur akses dan status akun.</p></div><x-button :href="route('users.create')"><i data-lucide="user-plus" class="size-4"></i>Tambah pengguna</x-button></div>
-<section class="card !p-0"><x-table><thead><tr><th>Nama</th><th>Email</th><th>Role</th><th>Hak tambahan</th><th>Status</th><th>Aksi</th></tr></thead><tbody>@forelse($users as $user)<tr><td class="font-semibold">{{ $user->name }}</td><td>{{ $user->email }}</td><td class="capitalize">{{ $user->role }}</td><td class="text-xs">{{ $user->can_manage_catalog?'Katalog · ':'' }}{{ $user->can_discount?'Diskon':'' }}</td><td><x-badge :status="$user->is_active?'active':'inactive'">{{ $user->is_active?'Aktif':'Nonaktif' }}</x-badge></td><td><x-button :href="route('users.edit',$user)" variant="secondary" class="!p-2"><i data-lucide="pencil" class="size-4"></i></x-button></td></tr>@empty<tr><td colspan="6"><x-empty title="Belum ada pengguna"/></td></tr>@endforelse</tbody></x-table><div class="p-5">{{ $users->links() }}</div></section>
-@endsection

@@ -1,0 +1,26 @@
+<div x-show="screen==='login'||screen==='password'" class="grid min-h-screen lg:grid-cols-2">
+    <section class="hidden bg-[#202020] p-16 text-white lg:flex lg:flex-col lg:justify-between"><div class="flex items-center gap-3"><i data-lucide="coffee" class="size-10 text-brand"></i><b class="text-2xl">Suwanting Coffee</b></div><div><p class="eyebrow">DIRACIK DENGAN HATI</p><h1 class="text-5xl font-semibold leading-tight">Kopi yang hangat.<br>Kerja yang tertata.</h1><p class="mt-6 max-w-md text-sm leading-7 text-stone-400">Satu ruang untuk melayani pelanggan, mengelola menu, dan menjaga setiap racikan.</p></div><p class="text-xs text-stone-500">Suwanting Coffee · Point of Sale</p></section>
+    <section class="flex items-center justify-center p-6 md:p-12"><div class="w-full max-w-md">
+        <div class="mb-8 flex items-center justify-between"><a href="#/dashboard" class="flex items-center gap-3 font-semibold"><i data-lucide="coffee" class="size-8 text-brand"></i>Suwanting Coffee POS</a><button @click="theme()" class="btn btn-secondary !p-2" aria-label="Ganti tema"><i data-lucide="sun-moon" class="size-5"></i></button></div>
+        <h2 class="text-2xl font-semibold" x-text="screen==='password'?'Atur password baru':'Selamat datang kembali.'"></h2><p class="mb-6 mt-3 text-sm text-stone-500">Masuk dengan akun toko yang sudah diaktifkan.</p>
+        <div x-show="error" x-text="error" role="alert" class="mb-5 rounded-xl bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950 dark:text-red-100"></div>
+        <div x-show="authMessage" x-text="authMessage" role="status" class="mb-5 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-100"></div>
+        <form x-show="screen==='login'&&!setupRequired&&!upgradeRequired&&hasOwner" @submit.prevent="login()" class="grid gap-5">
+            <label class="text-sm font-medium">Email<input x-model="credentials.email" type="email" autocomplete="username" required maxlength="255" class="field mt-2" placeholder="nama@toko.com"></label>
+            <label class="text-sm font-medium">Password<input x-model="credentials.password" type="password" autocomplete="current-password" required class="field mt-2" placeholder="Password akun Anda"></label>
+            <button :disabled="busy" class="btn btn-primary w-full" x-text="busy?'Menghubungkan…':'Masuk ke ruang kerja'"></button>
+            <button type="button" @click="resetPassword()" :disabled="busy" class="text-sm font-medium text-brand">Lupa password</button>
+        </form>
+        <form x-show="screen==='password'" @submit.prevent="changePassword()" class="grid gap-5"><label class="text-sm font-medium">Password baru<input x-model="newPassword" type="password" minlength="10" autocomplete="new-password" required class="field mt-2"></label><button :disabled="busy" class="btn btn-primary">Simpan password</button></form>
+        <div x-show="setupRequired||upgradeRequired||!hasOwner" class="card mt-5 space-y-4 text-sm">
+            <h3 class="font-semibold" x-text="upgradeRequired?'Perbarui database':'Siapkan toko sekali'"></h3>
+            <p x-show="upgradeRequired">Unduh <a href="./updates/20261020000200_product_details.sql" download class="font-semibold text-brand">SQL pembaruan produk</a>, lalu jalankan di SQL Editor proyek ini. Data yang sudah ada tetap tersimpan.</p>
+            <ol x-show="setupRequired||!hasOwner" class="list-inside list-decimal space-y-3 leading-6"><li x-show="setupRequired">Unduh <a href="./setup.sql" download class="font-semibold text-brand">setup.sql</a>, lalu jalankan di SQL Editor Supabase proyek ini.</li><li>Buat akun toko di Supabase → Authentication → Users → Add user.</li><li>Isi email akun tersebut, lalu jalankan SQL berikut di SQL Editor untuk mengaktifkan owner pertama.</li></ol>
+            <div x-show="!hasOwner"><label class="block">Email owner<input x-model="setupEmail" type="email" class="field mt-2" placeholder="owner@toko.com"></label><pre class="mt-3 overflow-x-auto rounded-lg bg-stone-100 p-3 text-xs dark:bg-stone-800" x-text="ownerSql"></pre></div>
+            <button @click="connect()" class="btn btn-primary">Periksa lagi</button>
+        </div>
+        <button @click="configOpen=!configOpen" class="mt-8 text-xs text-stone-500">Konfigurasi koneksi</button>
+        <form x-show="configOpen" @submit.prevent="saveConfig()" class="mt-4 grid gap-4"><label class="text-xs">Project URL<input x-model="publicConfig.url" type="url" required class="field mt-2"></label><label class="text-xs">Publishable / anon key<input x-model="publicConfig.key" required class="field mt-2" autocomplete="off"></label><p class="text-xs text-stone-500">Gunakan key publik. Jangan masukkan secret atau service_role key.</p><button class="btn btn-secondary">Simpan koneksi</button></form>
+        <p class="mt-8 text-center text-xs text-stone-400">Koneksi internet diperlukan untuk menggunakan kasir.</p>
+    </div></section>
+</div>

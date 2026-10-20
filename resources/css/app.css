@@ -1,7 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
-@source '../../resources/views';
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../index.html';
+@source '../views/static';
+@source '../js';
 @theme {
     --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
     --color-brand: #f28500;
@@ -40,4 +41,19 @@
     .qty-button { @apply flex size-9 items-center justify-center rounded-lg border border-stone-200 text-base hover:bg-orange-50 dark:border-stone-700 dark:hover:bg-stone-800; }
 }
 [x-cloak] { display: none !important; }
+.receipt-mode .workspace-chrome { display: none !important; }
+.receipt-mode .workspace-body { padding: 0 !important; }
+.receipt-mode #main { padding: 0 !important; max-width: none; }
+.receipt-paper { width: var(--receipt-width, 72mm); max-width: 100%; margin: 24px auto; padding: 8px; background: white; color: #222; font: 12px/1.6 ui-monospace, monospace; overflow-wrap: anywhere; }
+.receipt-paper h1 { text-align: center; font: 700 18px system-ui; }
+.receipt-paper .receipt-row { display: flex; justify-content: space-between; gap: 12px; margin: 6px 0; }
+.receipt-paper .receipt-row b { flex-shrink: 0; }
+.receipt-paper .receipt-line { border-top: 1px dashed #888; margin: 14px 0; padding-top: 10px; }
+@media print {
+    @page { margin: 4mm; }
+    .workspace-chrome, .no-print, dialog, [role="alert"], .toast { display: none !important; }
+    .workspace-body, #main { padding: 0 !important; }
+    body, .receipt-paper { background: white !important; color: #222 !important; }
+    .receipt-paper { padding: 0; margin: 0; }
+}
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }

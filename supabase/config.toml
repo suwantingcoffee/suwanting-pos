@@ -1,0 +1,6 @@
+project_id = "suwanting-pos"
+
+[functions.scpos-create-user]
+# Handler verifies bearer token with Auth, then checks current database owner role.
+# Supports current Supabase publishable keys and asymmetric Auth signing keys.
+verify_jwt = false

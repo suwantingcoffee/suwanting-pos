@@ -1,0 +1,35 @@
+<div x-data="workspace" @keydown.escape.window="sidebar=false" x-cloak>
+    <div x-show="screen==='loading'" class="grid min-h-screen place-items-center p-6"><div class="card text-center"><i data-lucide="coffee" class="mx-auto mb-4 size-12 text-brand"></i><p>Menghubungkan Suwanting Coffee…</p></div></div>
+    <!-- AUTH -->
+    <div x-show="screen==='workspace'">
+        <a href="#main" @click.prevent="$refs.main.focus()" class="sr-only focus:not-sr-only focus:fixed focus:z-50 focus:bg-white focus:p-4">Lewati ke konten</a>
+        <div x-show="sidebar" @click="sidebar=false" class="workspace-chrome fixed inset-0 z-30 bg-black/40 lg:hidden"></div>
+        <aside class="workspace-chrome fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-stone-200 bg-white p-5 transition-transform dark:border-stone-700 dark:bg-stone-900 lg:translate-x-0" :class="sidebar?'translate-x-0':'-translate-x-full'">
+            <a href="#/dashboard" class="flex items-center gap-3 px-2 py-4"><span class="flex size-11 items-center justify-center rounded-2xl bg-brand text-white"><i data-lucide="coffee"></i></span><span><b class="text-lg">Suwanting</b><span class="block text-[10px] tracking-[.24em] text-stone-500">COFFEE · POINT OF SALE</span></span></a>
+            <p class="mb-3 mt-8 px-3 text-[10px] font-semibold tracking-[.2em] text-stone-400">RUANG KERJA</p>
+            <nav class="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto" aria-label="Menu utama">
+                <template x-for="item in allowedNavigation" :key="item.page"><a :href="'#/'+item.page" class="nav-link" :class="page===item.page?'active':''" :aria-current="page===item.page?'page':null"><i :data-lucide="item.icon" class="size-5"></i><span x-text="item.label"></span></a></template>
+            </nav>
+            <div class="mt-5 border-t border-stone-100 pt-5 dark:border-stone-700"><p class="truncate text-sm font-semibold" x-text="profile?.name"></p><p class="mt-1 text-xs capitalize text-stone-500" x-text="profile?.role"></p><button @click="logout()" class="btn btn-secondary mt-4 w-full"><i data-lucide="log-out" class="size-4"></i>Keluar</button></div>
+        </aside>
+        <div class="workspace-body lg:pl-64">
+            <header class="workspace-chrome sticky top-0 z-20 flex h-20 items-center justify-between gap-3 border-b border-stone-200 bg-white/95 px-4 backdrop-blur-sm dark:border-stone-700 dark:bg-stone-900/95 md:px-8">
+                <div class="flex min-w-0 items-center gap-3"><button @click="sidebar=!sidebar" class="btn btn-secondary !p-2.5 lg:hidden" aria-label="Buka navigasi"><i data-lucide="menu" class="size-5"></i></button><span class="truncate text-sm"><span class="hidden text-stone-400 sm:inline">Suwanting Coffee / </span><span x-text="title"></span></span></div>
+                <div class="flex items-center gap-3"><span class="hidden text-xs text-stone-500 md:block" x-text="today()"></span><button @click="theme()" class="btn btn-secondary !p-2.5" aria-label="Ganti tema"><i data-lucide="sun-moon" class="size-5"></i></button><span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-sm font-semibold text-orange-700" x-text="profile?.name?.slice(0,1)"></span></div>
+            </header>
+            <main id="main" x-ref="main" tabindex="-1" class="mx-auto max-w-[1600px] p-4 pb-28 outline-none md:p-8 lg:pb-8" :aria-busy="loading?'true':'false'">
+                <div x-show="notice" class="toast mb-5 flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100" role="status"><span x-text="notice"></span><button @click="notice=''" aria-label="Tutup pemberitahuan">×</button></div>
+                <div x-show="error" role="alert" class="mb-5 whitespace-pre-wrap rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-100" x-text="error"></div>
+                <p x-show="loading" class="mb-4 text-sm text-stone-500" role="status">Memuat data…</p>
+                <!-- DASHBOARD -->
+                <!-- POS -->
+                <!-- TABLE -->
+                <!-- SETTINGS -->
+                <!-- TRANSACTION -->
+                <!-- REPORTS -->
+            </main>
+            <nav class="workspace-chrome fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-stone-200 bg-white p-2 pb-[max(.5rem,env(safe-area-inset-bottom))] dark:border-stone-700 dark:bg-stone-900 lg:hidden" aria-label="Navigasi cepat"><template x-for="item in navigation.slice(0,4)" :key="item.page"><a :href="'#/'+item.page" class="flex flex-col items-center gap-1 rounded-xl p-2 text-xs" :class="page===item.page?'bg-orange-50 text-brand dark:bg-orange-950/40':'text-stone-500'"><i :data-lucide="item.icon" class="size-5"></i><span x-text="item.page==='dashboard'?'Home':item.label"></span></a></template></nav>
+        </div>
+    </div>
+    <!-- DIALOGS -->
+</div>
