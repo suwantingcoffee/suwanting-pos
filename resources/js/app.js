@@ -1,7 +1,7 @@
 import Alpine from 'alpinejs';
 import { createIcons, Coffee, Croissant, LayoutDashboard, ShoppingBag, ReceiptText, UserPlus, Package, Tags, Warehouse, ChartNoAxesCombined, Users, History, Settings, LogOut, Menu, SunMoon, Plus, Search, ShoppingBasket, ArrowRight, Printer } from 'lucide';
 import '../css/app.css';
-import { backend, rpc, uploadPhoto, photoUrls } from './backend.js';
+import { backend, rpc, uploadPhoto, photoUrls, logoUrl, avatarUrl, removeUnusedPhoto, validatePhoto } from './backend.js';
 import { getConfig, validateConfig } from './config.js';
 import { money, dateTime, today, quantity, cartTotals, csv, routeFromHash, definitiveFailure, decimalUnits } from './domain.js';
 import { schemas, navigation, columns } from './schema.js';
@@ -15,13 +15,14 @@ import transaction from '../views/static/transaction.html?raw';
 import reports from '../views/static/reports.html?raw';
 import dialogs from '../views/static/dialogs.html?raw';
 import receipt from '../views/static/receipt.html?raw';
+import account from '../views/static/account.html?raw';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const icons = { Coffee, Croissant, LayoutDashboard, ShoppingBag, ReceiptText, UserPlus, Package, Tags, Warehouse, ChartNoAxesCombined, Users, History, Settings, LogOut, Menu, SunMoon, Plus, Search, ShoppingBasket, ArrowRight, Printer };
 const emptyCart = () => ({ lines: [], customer: '', selectedCustomer: null, discount: '0', received: '', method: 'cash', confirmed: false });
 const emptyFilters = () => ({ q: '', status: '', from: '', to: '', ingredient_id: '' });
 const defaults = { shop_name: 'Suwanting Coffee', shop_address: '', shop_phone: '', shop_email: '', tax_enabled: false, tax_rate: '11.00', receipt_header: '', receipt_footer: 'Terima kasih. Sampai bertemu kembali.', receipt_paper: '80', receipt_show_cashier: true, receipt_show_customer: true, receipt_show_sku: false, receipt_auto_print: false, simulate_payments: true };
-const view = shell.replace('<!-- AUTH -->', auth).replace('<!-- DASHBOARD -->', dashboard).replace('<!-- POS -->', pos).replace('<!-- TABLE -->', table).replace('<!-- SETTINGS -->', settings).replace('<!-- TRANSACTION -->', transaction).replace('<!-- REPORTS -->', reports).replace('<!-- DIALOGS -->', dialogs).replaceAll('<!-- RECEIPT -->', receipt);
+const view = shell.replace('<!-- AUTH -->', auth).replace('<!-- DASHBOARD -->', dashboard).replace('<!-- POS -->', pos).replace('<!-- TABLE -->', table).replace('<!-- SETTINGS -->', settings).replace('<!-- ACCOUNT -->', account).replace('<!-- TRANSACTION -->', transaction).replace('<!-- REPORTS -->', reports).replace('<!-- DIALOGS -->', dialogs).replaceAll('<!-- RECEIPT -->', receipt);
 document.querySelector('#app').innerHTML = view;
 
 Alpine.data('workspace', () => ({
@@ -32,6 +33,9 @@ Alpine.data('workspace', () => ({
     dashboard: { weekly: [], methods: [], recent: [] }, report: { products: [], methods: [] },
     table: { rows: [], total: 0, page: 1, per_page: 20 }, filters: emptyFilters(), inventoryTab: 'ingredients',
     editor: null, editorError: '', stockForm: null, stockPending: null, stockError: '',
+    avatar: '', logo: '', shopName: 'Suwanting Coffee', accountDraft: {}, accountPhoto: null, accountPreview: '', accountRemovePhoto: false,
+    accountError: '', passwordForm: { current: '', next: '', confirmation: '' }, passwordError: '', passwordNotice: '',
+    logoFile: null, logoPreview: '', logoRemove: false, logoError: '', confirmationError: '', skuVersion: 0,
     sale: null, receiptPreview: false, previewSale: null, connection: null, connectionBusy: false,
     modal: '', confirmation: null, reviewOpen: false, pendingPayload: null, requestVersion: 0,
     ...emptyCart(), search: '', category: 'all', selectedVariants: {}, cartOpen: false,
@@ -78,8 +82,8 @@ Alpine.data('workspace', () => ({
     async connect() {
         this.error = ''; this.setupRequired = false; this.upgradeRequired = false;
         try {
-            const status = await rpc('status'); this.hasOwner = status.has_owner;
-            if (status.version < 2) { this.upgradeRequired = true; this.screen = 'login'; this.error = 'Pembaruan database tersedia. Jalankan SQL pembaruan di bawah, lalu periksa lagi.'; return; }
+            const status = await rpc('status'); this.hasOwner = status.has_owner; this.applyBranding(status.branding);
+            if (status.version < 3) { this.upgradeRequired = true; this.screen = 'login'; this.error = 'Pembaruan database tersedia. Jalankan SQL pembaruan di bawah, lalu periksa lagi.'; return; }
             const { data, error } = await backend().auth.getSession();
             if (error) throw error;
             if (new URLSearchParams(location.search).has('recovery') && data.session) { this.screen = 'password'; return; }
@@ -115,6 +119,8 @@ Alpine.data('workspace', () => ({
         const data = await rpc('bootstrap');
         this.profile = data.profile; this.settings = data.settings; this.settingsDraft = clone(data.settings);
         this.categories = data.categories; this.products = data.products;
+        this.applyBranding(data.settings);
+        try { this.avatar = await avatarUrl(data.profile.avatar_path); } catch { this.avatar = ''; }
         try { this.images = await photoUrls(data.products); } catch { this.images = {}; }
     },
     clearSession() {
@@ -123,6 +129,8 @@ Alpine.data('workspace', () => ({
         this.dashboard = { weekly: [], methods: [], recent: [] }; this.report = { products: [], methods: [] };
         this.sale = null; this.editor = null; this.stockForm = null; this.stockPending = null; this.modal = ''; this.pendingPayload = null;
         this.customerResults = []; this.settings = { ...defaults }; this.settingsDraft = { ...defaults }; Object.assign(this, emptyCart());
+        this.avatar = ''; this.accountDraft = {}; this.accountPhoto = null; this.resetPreview('accountPreview'); this.resetPreview('logoPreview');
+        this.passwordForm = { current: '', next: '', confirmation: '' }; this.logoFile = null; this.logoRemove = false;
     },
     async logout() {
         const { error } = await backend().auth.signOut({ scope: 'local' });
@@ -149,6 +157,8 @@ Alpine.data('workspace', () => ({
     },
     go(page) { if (location.hash === '#/' + page) this.navigate(); else location.hash = '#/' + page; },
     async navigate() {
+        this.passwordForm = { current: '', next: '', confirmation: '' };
+        this.passwordError = ''; this.passwordNotice = '';
         const route = routeFromHash(location.hash);
         const item = navigation.find(item => item.page === route.page);
         if (!item && route.page !== 'sale' || item?.capability && !this.can(item.capability)) { this.go('dashboard'); return; }
@@ -165,6 +175,7 @@ Alpine.data('workspace', () => ({
             else if (this.page === 'pos') { await this.bootstrap(); }
             else if (this.page === 'reports') { const data = await rpc('report', { p_filters: { from: this.filters.from, to: this.filters.to } }); if (version === this.requestVersion) this.report = data; }
             else if (this.page === 'settings') { await this.bootstrap(); }
+            else if (this.page === 'account') { await this.bootstrap(); this.resetAccount(); }
             else {
                 if (this.can('catalog')) this.options = await rpc('options');
                 await this.loadTable(1, version);
@@ -175,7 +186,10 @@ Alpine.data('workspace', () => ({
     async loadTable(page = 1, version = null) {
         version ??= ++this.requestVersion; this.loading = true;
         try {
-            const data = await rpc('list', { p_entity: this.entity, p_filters: { ...this.filters, page, per_page: 20 } });
+            const data = this.entity === 'product_types'
+                ? await rpc('product_type_list', { p_filters: { q: this.filters.q, status: this.filters.status, page, per_page: 20 } })
+                : await rpc('list', { p_entity: this.entity, p_filters: { ...this.filters, page, per_page: 20 } });
+            if (!data.rows.length && page > 1 && data.total > 0) return await this.loadTable(Math.max(1, Math.ceil(data.total / data.per_page)), version);
             if (version === this.requestVersion) this.table = data;
         } catch (error) { if (version === this.requestVersion) this.error = error.message; }
         finally { if (version === this.requestVersion) this.loading = false; }
@@ -188,14 +202,48 @@ Alpine.data('workspace', () => ({
         if (column.type === 'quantity' || column.type === 'stock') return quantity(value);
         if (column.type === 'status') return value ? 'Aktif' : 'Nonaktif';
         if (column.type === 'payment') return value === 'paid' ? 'Lunas' : 'Menunggu';
+        if (column.type === 'product_type') return this.options.product_types?.find(item => item.id === value)?.name || value;
         if (column.type === 'recipe') return value?.map(item => quantity(item.quantity) + ' ' + item.unit_symbol + ' ' + item.ingredient_name).join(', ') || '—';
         return value || '—';
     },
     choices(source) {
-        if (source === 'productTypes') return [{ id: 'drink', name: 'Minuman' }, { id: 'beans', name: 'Kopi kemasan' }, { id: 'food', name: 'Makanan' }];
+        if (source === 'productTypes') return this.options.product_types || [];
         if (source === 'roles') return ['cashier', 'admin', 'owner'].map(id => ({ id, name: id }));
         if (source === 'recipeVariants') return this.options.products?.find(product => String(product.id) === String(this.editor?.data.product_id))?.variants || [];
         return this.options[source] || [];
+    },
+    editorFieldChanged(field) {
+        if (field.key === 'sku') { this.editor.skuAuto = false; return; }
+        if (field.key === 'code') { this.editor.codeAuto = false; return; }
+        if (field.key === 'name' && this.editor.entity === 'product_types' && this.editor.codeAuto) {
+            this.editor.data.code = this.editor.data.name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,30);
+        }
+    },
+    async suggestEditorSku(force = false) {
+        const editor = this.editor;
+        if (!editor || !['products','ingredients'].includes(editor.entity)) return;
+        if (force) editor.skuAuto = true;
+        if (!editor.skuAuto) return;
+        const name = editor.data.name.trim(), version = ++this.skuVersion;
+        if (!name) { editor.data.sku = ''; return; }
+        try {
+            const reserved = (editor.data.variants || []).map(v => v.sku).filter(Boolean);
+            const sku = await rpc('suggest_sku', { p_name: name, p_entity: editor.entity, p_reserved: reserved });
+            if (this.editor === editor && version === this.skuVersion && editor.skuAuto && editor.data.name.trim() === name) editor.data.sku = sku;
+        } catch (error) { if (this.editor === editor && version === this.skuVersion) this.editorError = error.message; }
+    },
+    async suggestVariantSku(variant, force = false) {
+        const editor = this.editor;
+        if (force) variant.skuAuto = true;
+        if (!variant.skuAuto) return;
+        const name = (editor.data.name + ' ' + variant.name).trim();
+        const request = variant.skuRequest = (variant.skuRequest || 0) + 1;
+        if (!variant.name.trim()) { variant.sku = ''; return; }
+        try {
+            const reserved = [editor.data.sku, ...editor.data.variants.filter(v => v !== variant).map(v => v.sku)].filter(Boolean);
+            const sku = await rpc('suggest_sku', { p_name: name, p_entity: 'products', p_reserved: reserved });
+            if (this.editor === editor && variant.skuAuto && variant.skuRequest === request && (editor.data.name + ' ' + variant.name).trim() === name) variant.sku = sku;
+        } catch (error) { if (this.editor === editor) this.editorError = error.message; }
     },
     async edit(row = null) {
         this.error = ''; this.editorError = '';
@@ -206,7 +254,8 @@ Alpine.data('workspace', () => ({
             if (row) data.id = row.id;
             if (this.entity === 'products') { data.variants = clone(row?.variants || []); data.photo_path = row?.photo_path || null; }
             if (this.entity === 'recipes') data.items = (row?.items || [{ ingredient_id: '', quantity: '1' }]).map(item => ({ ingredient_id: item.ingredient_id, quantity: String(item.quantity) }));
-            this.editor = { entity: this.entity, data, originalEmail: row?.email || '', photo: null, password: '' }; this.modal = 'editor';
+            this.skuVersion++;
+            this.editor = { entity: this.entity, data, originalEmail: row?.email || '', photo: null, password: '', skuAuto: !row, codeAuto: !row }; this.modal = 'editor';
             this.$nextTick(() => this.$refs.editorDialog.showModal());
         } catch (error) { this.error = error.message; }
     },
@@ -223,26 +272,29 @@ Alpine.data('workspace', () => ({
                 } else { delete payload.email; await rpc('save', { p_entity: entity, p_data: payload }); }
             } else {
                 if (entity === 'products') {
-                    payload.variants = payload.variants.map(variant => ({ ...(variant.id ? { id: variant.id } : {}), name: variant.name, sku: variant.sku, price_adjustment: String(variant.price_adjustment), is_active: !!variant.is_active }));
+                    payload.variants = payload.variants.map(variant => ({ ...(variant.id ? { id: variant.id } : {}), name: variant.name, sku: variant.sku, sku_auto: !!variant.skuAuto, price_adjustment: String(variant.price_adjustment), is_active: !!variant.is_active }));
                     if (this.editor.photo) payload.photo_path = await uploadPhoto(this.editor.photo, this.profile.id);
                 }
                 if (entity === 'recipes') payload.product_variant_id ||= null;
-                await rpc('save', { p_entity: entity, p_data: payload });
+                if (['products','ingredients'].includes(entity)) payload.sku_auto = this.editor.skuAuto;
+                if (entity === 'product_types') await rpc('product_type_save', { p_data: payload });
+                else await rpc('save', { p_entity: entity, p_data: payload });
             }
             this.$refs.editorDialog.close(); this.modal = ''; this.notice = 'Data disimpan.'; await this.bootstrap(); await this.loadTable(this.table.page);
         } catch (error) { this.editorError = error.message; } finally { this.busy = false; }
     },
     closeDialog(ref) { if (this.busy) return; this.$refs[ref]?.close(); this.modal = ''; },
     async ask(message, action) {
-        this.confirmation = { message, action }; this.modal = 'confirm'; this.$nextTick(() => this.$refs.confirmDialog.showModal());
+        this.confirmationError = ''; this.confirmation = { message, action }; this.modal = 'confirm'; this.$nextTick(() => this.$refs.confirmDialog.showModal());
     },
     async accept() {
         if (this.busy) return; this.busy = true;
         try { await this.confirmation.action(); this.$refs.confirmDialog.close(); this.modal = ''; }
-        catch (error) { this.error = error.message; }
+        catch (error) { this.confirmationError = error.message; }
         finally { this.busy = false; }
     },
-    archive(row) { this.ask('Arsipkan ' + (row.name || row.product_name) + '? Riwayat transaksi tetap tersimpan.', async () => { await rpc('archive', { p_entity: this.entity, p_id: row.id }); await this.bootstrap(); await this.loadTable(this.table.page); this.notice = 'Data diarsipkan.'; }); },
+    archive(row) { const entity = this.entity; this.ask('Arsipkan ' + (row.name || row.product_name) + '? Riwayat transaksi tetap tersimpan.', async () => { if (entity === 'product_types') await rpc('product_type_archive', { p_code: row.id }); else await rpc('archive', { p_entity: entity, p_id: row.id }); await this.bootstrap(); if (this.can('catalog')) this.options = await rpc('options'); await this.loadTable(this.table.page); this.notice = 'Data diarsipkan.'; }); },
+    deleteRow(row) { const entity = this.entity; this.ask('Hapus permanen ' + (row.name || row.product_name) + '? Tindakan tidak dapat dibatalkan. Data yang terhubung transaksi, stok, atau data lain akan ditolak. Gunakan Arsipkan untuk mempertahankan riwayat.', async () => { await rpc('delete', { p_entity: entity, p_id: String(row.id) }); await this.bootstrap(); if (this.can('catalog')) this.options = await rpc('options'); await this.loadTable(this.table.page); this.notice = 'Data dihapus.'; }); },
     showAudit(row) { this.confirmation = { message: JSON.stringify({ sebelum: row.before_data, sesudah: row.after_data }, null, 2), action: null }; this.modal = 'audit'; this.$nextTick(() => this.$refs.auditDialog.showModal()); },
     openStock(row) {
         this.stockForm = { ingredient_id: row.id, ingredient_name: row.name, type: 'receipt', direction: 'add', quantity: '', reason: '', reference: '' };
@@ -263,6 +315,69 @@ Alpine.data('workspace', () => ({
             if (definitiveFailure(error)) { this.stockPending = null; sessionStorage.removeItem('scpos-stock-' + this.profile.id); }
             this.stockError = error.message + (this.stockPending ? ' Hasil belum pasti. Ulangi penyimpanan dengan data yang sama.' : '');
         } finally { this.busy = false; }
+    },
+    applyBranding(branding) {
+        this.shopName = branding?.shop_name || 'Suwanting Coffee'; this.logo = logoUrl(branding?.logo_path);
+        let icon = document.querySelector('link[data-pos-icon]');
+        if (!this.logo) { icon?.remove(); return; }
+        if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; icon.dataset.posIcon = ''; document.head.append(icon); }
+        icon.href = this.logo;
+    },
+    resetPreview(key) { if (this[key]) URL.revokeObjectURL(this[key]); this[key] = ''; },
+    resetAccount() {
+        this.accountDraft = { name: this.profile.name, phone: this.profile.phone || '' };
+        this.accountPhoto = null; this.accountRemovePhoto = false; this.accountError = ''; this.resetPreview('accountPreview');
+        if (this.$refs.accountFile) this.$refs.accountFile.value = '';
+    },
+    async selectImage(event, kind) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const errorKey = kind === 'account' ? 'accountError' : 'logoError'; this[errorKey] = '';
+        try {
+            await validatePhoto(file);
+            this.resetPreview(kind === 'account' ? 'accountPreview' : 'logoPreview');
+            if (kind === 'account') { this.accountPhoto = file; this.accountPreview = URL.createObjectURL(file); this.accountRemovePhoto = false; }
+            else { this.logoFile = file; this.logoPreview = URL.createObjectURL(file); this.logoRemove = false; }
+        } catch (error) { this[errorKey] = error.message; event.target.value = ''; }
+    },
+    clearAccountPhoto() { this.accountPhoto = null; this.accountRemovePhoto = true; this.resetPreview('accountPreview'); this.$refs.accountFile.value = ''; },
+    clearLogo() { this.logoFile = null; this.logoRemove = true; this.resetPreview('logoPreview'); this.$refs.logoFile.value = ''; },
+    async saveAccount() {
+        if (this.busy) return; this.busy = true; this.accountError = '';
+        const oldPath = this.profile.avatar_path;
+        try {
+            const path = this.accountPhoto ? await uploadPhoto(this.accountPhoto, this.profile.id, 'scpos-avatars') : this.accountRemovePhoto ? null : oldPath;
+            this.profile = await rpc('account', { p_data: { ...this.accountDraft, avatar_path: path || null } });
+            this.accountPhoto = null; this.resetPreview('accountPreview'); this.accountRemovePhoto = false;
+            try { this.avatar = await avatarUrl(this.profile.avatar_path); } catch { this.avatar = ''; }
+            if (oldPath && oldPath !== this.profile.avatar_path) await removeUnusedPhoto('scpos-avatars', oldPath).catch(() => {});
+            this.notice = 'Akun diperbarui.';
+        } catch (error) { this.accountError = error.message; } finally { this.busy = false; }
+    },
+    async saveAccountPassword() {
+        if (this.busy) return; this.busy = true; this.passwordError = ''; this.passwordNotice = '';
+        try {
+            const { current, next, confirmation } = this.passwordForm;
+            if (next.length < 10 || next.length > 128) throw new Error('Password baru harus 10–128 karakter.');
+            if (next !== confirmation) throw new Error('Konfirmasi password tidak sama.');
+            const check = await backend().auth.signInWithPassword({ email: this.profile.email, password: current });
+            if (check.error) throw new Error('Password saat ini salah atau sesi tidak dapat diverifikasi.');
+            const { error } = await backend().auth.updateUser({ password: next }); if (error) throw error;
+            this.passwordNotice = 'Password diperbarui. Gunakan password baru saat login berikutnya.';
+        } catch (error) { this.passwordError = error.message; }
+        finally { this.passwordForm = { current: '', next: '', confirmation: '' }; this.busy = false; }
+    },
+    async saveLogo() {
+        if (this.busy) return; this.busy = true; this.logoError = '';
+        const oldPath = this.settings.logo_path;
+        try {
+            const path = this.logoFile ? await uploadPhoto(this.logoFile, this.profile.id, 'scpos-branding') : this.logoRemove ? null : oldPath;
+            const result = await rpc('branding', { p_logo_path: path || null });
+            this.settings.logo_path = result.logo_path; this.settingsDraft.logo_path = result.logo_path; this.applyBranding(result);
+            this.logoFile = null; this.logoRemove = false; this.resetPreview('logoPreview'); this.$refs.logoFile.value = '';
+            if (oldPath && oldPath !== result.logo_path) await removeUnusedPhoto('scpos-branding', oldPath).catch(() => {});
+            this.notice = 'Logo toko disimpan.';
+        } catch (error) { this.logoError = error.message; } finally { this.busy = false; }
     },
     async saveSettings() {
         if (this.busy) return; this.busy = true; this.error = '';

@@ -56,7 +56,13 @@ export async function startDatabase() {
             create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');
             create function auth.uid() returns uuid language sql stable as $$ select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid $$;
             grant usage on schema public,auth to anon,authenticated;
-            grant execute on function auth.uid() to authenticated;`);
+            grant execute on function auth.uid() to authenticated;
+            create schema storage;
+            create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+            create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text not null references storage.buckets,name text not null,metadata jsonb not null default '{}',unique(bucket_id,name));
+            alter table storage.objects enable row level security;
+            grant usage on schema storage to authenticated;
+            grant select,insert,delete on storage.objects to authenticated;`);
         const migrations = new URL('../../supabase/migrations/', import.meta.url);
         for (const name of (await readdir(migrations)).filter(name => name.endsWith('.sql')).sort()) await pool.query(await readFile(new URL(name, migrations), 'utf8'));
     } catch (error) { await shutdown(); throw error; }
@@ -86,7 +92,8 @@ export async function startDatabase() {
         },
         async reset() {
             await pool.query('update suwanting_pos.settings set data=$1::jsonb where id=1', [JSON.stringify(initialSettings)]);
-            await pool.query(`truncate suwanting_pos.audit_logs,suwanting_pos.stock_movements,suwanting_pos.sale_item_ingredients,suwanting_pos.sale_items,suwanting_pos.sales,suwanting_pos.recipe_items,suwanting_pos.recipes,suwanting_pos.product_variants,suwanting_pos.products,suwanting_pos.customers,suwanting_pos.ingredients,suwanting_pos.inventory_units,suwanting_pos.categories,suwanting_pos.profiles,auth.users restart identity;
+            await pool.query(`truncate storage.objects,suwanting_pos.audit_logs,suwanting_pos.stock_movements,suwanting_pos.sale_item_ingredients,suwanting_pos.sale_items,suwanting_pos.sales,suwanting_pos.recipe_items,suwanting_pos.recipes,suwanting_pos.product_variants,suwanting_pos.products,suwanting_pos.product_types,suwanting_pos.customers,suwanting_pos.ingredients,suwanting_pos.inventory_units,suwanting_pos.categories,suwanting_pos.profiles,auth.users restart identity;
+                insert into suwanting_pos.product_types(code,name) values('drink','Minuman'),('beans','Kopi kemasan'),('food','Makanan');
                 insert into auth.users(id,email) values('${owner}','owner@example.test'),('${cashier}','cashier@example.test'),('${secondCashier}','cashier2@example.test'),('${inactive}','inactive@example.test'),('${admin}','admin@example.test');
                 update suwanting_pos.profiles set name='Owner Pengujian',role='owner',is_active=true where id='${owner}';
                 update suwanting_pos.profiles set is_active=true where id in ('${cashier}','${secondCashier}');

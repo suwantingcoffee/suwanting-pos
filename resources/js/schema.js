@@ -4,6 +4,7 @@ const select = (key, label, source, value = '') => ({ key, label, type: 'select'
 const active = { key: 'is_active', label: 'Aktif', type: 'checkbox', value: true };
 export const schemas = {
     categories: { label: 'Kategori', capability: 'catalog', fields: [text('name', 'Nama kategori', 80), active] },
+    product_types: { label: 'Jenis Produk', capability: 'catalog', fields: [text('name', 'Nama jenis produk', 80), text('code', 'Kode jenis produk', 30), active] },
     customers: { label: 'Pelanggan', capability: 'customers', fields: [text('name', 'Nama pelanggan'), text('phone', 'Telepon', 30, false), { ...text('email', 'Email', 120, false), type: 'email' }, text('address', 'Alamat', 255, false), { ...text('notes', 'Catatan', 1000, false), type: 'textarea' }, active] },
     products: { label: 'Produk', capability: 'catalog', fields: [text('name', 'Nama produk'), text('sku', 'SKU', 60), select('category_id', 'Kategori', 'categories'), select('product_type', 'Jenis produk', 'productTypes', 'drink'), number('selling_price', 'Harga jual (Rp)'), number('cost_price', 'Harga modal (Rp)'), { ...text('description', 'Deskripsi', 1000, false), type: 'textarea' }, active] },
     units: { label: 'Satuan dasar', capability: 'catalog', fields: [text('name', 'Nama satuan', 60), text('symbol', 'Simbol', 15)] },
@@ -19,16 +20,19 @@ export const navigation = [
     { page: 'customers', label: 'Pelanggan', icon: 'user-plus' },
     { page: 'products', label: 'Produk & menu', icon: 'package', capability: 'catalog' },
     { page: 'categories', label: 'Kategori', icon: 'tags', capability: 'catalog' },
+    { page: 'product_types', label: 'Jenis Produk', icon: 'package', capability: 'catalog' },
     { page: 'inventory', label: 'Inventori & resep', icon: 'warehouse', capability: 'catalog' },
     { page: 'reports', label: 'Laporan', icon: 'chart-no-axes-combined', capability: 'owner' },
     { page: 'users', label: 'Pengguna', icon: 'users', capability: 'owner' },
     { page: 'audit', label: 'Audit aktivitas', icon: 'history', capability: 'owner' },
     { page: 'settings', label: 'Pengaturan', icon: 'settings', capability: 'owner' },
+    { page: 'account', label: 'Akun saya', icon: 'users' },
 ];
 
 export const columns = {
     categories: [{ key: 'name', label: 'Nama' }, { key: 'is_active', label: 'Status', type: 'status' }],
-    products: [{ key: 'name', label: 'Produk' }, { key: 'sku', label: 'SKU' }, { key: 'category_name', label: 'Kategori' }, { key: 'selling_price', label: 'Harga', type: 'money' }, { key: 'is_active', label: 'Status', type: 'status' }],
+    product_types: [{ key: 'name', label: 'Nama' }, { key: 'code', label: 'Kode' }, { key: 'is_active', label: 'Status', type: 'status' }],
+    products: [{ key: 'name', label: 'Produk' }, { key: 'sku', label: 'SKU' }, { key: 'category_name', label: 'Kategori' }, { key: 'product_type', label: 'Jenis produk', type: 'product_type' }, { key: 'selling_price', label: 'Harga', type: 'money' }, { key: 'is_active', label: 'Status', type: 'status' }],
     customers: [{ key: 'name', label: 'Nama' }, { key: 'phone', label: 'Telepon' }, { key: 'email', label: 'Email' }, { key: 'is_active', label: 'Status', type: 'status' }],
     ingredients: [{ key: 'name', label: 'Bahan' }, { key: 'sku', label: 'SKU' }, { key: 'stock_quantity', label: 'Stok', type: 'stock' }, { key: 'minimum_stock', label: 'Minimum', type: 'quantity' }, { key: 'symbol', label: 'Satuan' }, { key: 'is_active', label: 'Status', type: 'status' }],
     units: [{ key: 'name', label: 'Satuan' }, { key: 'symbol', label: 'Simbol' }],

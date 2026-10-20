@@ -46,7 +46,7 @@ test('registered customer and variant checkout writes one paid sale and recipe d
 test('lost response after commit survives reload; immutable retry returns original invoice', async ({ page, request }) => {
     await login(page); await startSale(page); await request.post('/__test/lose-checkout'); await checkout(page);
     await expect(page.getByRole('button', { name: 'Ulangi checkout', exact: true }).first()).toBeVisible();
-    await expect(page.locator('main [role="alert"]')).toContainText('Hasil checkout belum pasti');
+    await expect(page.locator('main [role="alert"]:visible')).toContainText('Hasil checkout belum pasti');
     await expect(page.getByRole('button', { name: 'Tambah Kopi Susu Suwanting', exact: true })).toBeDisabled();
     await page.reload();
     await expect(page.getByRole('button', { name: 'Ulangi checkout', exact: true }).first()).toBeVisible();
@@ -173,4 +173,123 @@ test('mobile navigation and cart work without horizontal overflow', async ({ pag
     await page.screenshot({ path: '.test-artifacts/pos-mobile-cart.png', fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await checkout(page); await expect(page).toHaveURL(/#\/sale\/\d+$/);
+});
+
+
+const tinyPng = { name: 'profile.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ioAAAAASUVORK5CYII=', 'base64') };
+
+test('header account link lets cashier update own name phone photo and password', async ({page}) => {
+    await login(page,'cashier');
+    await page.getByRole('link',{name:'Pengaturan akun saya',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Akun saya',exact:true})).toBeVisible();
+    await page.getByLabel('Nama lengkap',{exact:true}).fill('Kasir Profil Baru');
+    await page.getByLabel('Nomor telepon',{exact:true}).fill('081212345');
+    await page.getByLabel('Foto profil',{exact:true}).setInputFiles(tinyPng);
+    await expect(page.getByAltText('Foto akun saya')).toBeVisible();
+    await page.getByRole('button',{name:'Simpan profil',exact:true}).click();
+    await expect(page.getByRole('status')).toContainText('Akun diperbarui.');
+    await page.reload();
+    await expect(page.getByLabel('Nama lengkap',{exact:true})).toHaveValue('Kasir Profil Baru');
+    await expect(page.getByLabel('Nomor telepon',{exact:true})).toHaveValue('081212345');
+    await expect(page.getByRole('link',{name:'Pengaturan akun saya',exact:true}).locator('img')).toHaveJSProperty('naturalWidth',1);
+    await page.getByLabel('Password saat ini',{exact:true}).fill('WrongCurrent!');
+    await page.locator('main').getByLabel('Password baru',{exact:true}).fill('NewPassword!2026');
+    await page.getByLabel('Konfirmasi password baru',{exact:true}).fill('NewPassword!2026');
+    await page.getByRole('button',{name:'Perbarui password',exact:true}).click();
+    await expect(page.getByRole('alert')).toContainText('Password saat ini salah');
+    await page.getByLabel('Password saat ini',{exact:true}).fill('TestOnly!2026');
+    await page.locator('main').getByLabel('Password baru',{exact:true}).fill('NewPassword!2026');
+    await page.getByLabel('Konfirmasi password baru',{exact:true}).fill('NewPassword!2026');
+    await page.getByRole('button',{name:'Perbarui password',exact:true}).click();
+    await expect(page.getByRole('status').filter({hasText:'Password diperbarui'})).toBeVisible();
+    await expect(page.locator('main').getByLabel('Password baru',{exact:true})).toHaveValue('');
+    await page.getByRole('button',{name:'Hapus foto profil',exact:true}).click();
+    await page.getByRole('button',{name:'Simpan profil',exact:true}).click();
+    await expect(page.getByRole('link',{name:'Pengaturan akun saya',exact:true}).locator('img')).toHaveCount(0);
+    await page.getByRole('button',{name:'Keluar',exact:true}).click();
+    await page.getByLabel('Email',{exact:true}).fill('cashier@example.test');
+    await page.getByLabel('Password',{exact:true}).fill('NewPassword!2026');
+    await page.getByRole('button',{name:'Masuk ke ruang kerja',exact:true}).click();
+    await expect(page.locator('main')).toBeVisible();
+    await page.setViewportSize({width:390,height:844});
+    await page.getByRole('link',{name:'Pengaturan akun saya',exact:true}).click();
+    await expect(page.getByLabel('Nama lengkap',{exact:true})).toHaveValue('Kasir Profil Baru');
+    await page.getByRole('button',{name:'Ganti tema',exact:true}).last().click();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:'.test-artifacts/account-mobile-dark.png',fullPage:true});
+});
+
+test('owner logo upload persists in navigation login favicon and can be removed', async ({page}) => {
+    await login(page); await nav(page,'Pengaturan');
+    await page.getByLabel('Upload logo toko',{exact:true}).setInputFiles({name:'bad.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg/>')});
+    await expect(page.getByRole('alert')).toContainText('Gambar harus JPG');
+    await page.getByLabel('Upload logo toko',{exact:true}).setInputFiles(tinyPng);
+    await page.getByRole('button',{name:'Simpan logo',exact:true}).click();
+    await expect(page.getByRole('status')).toContainText('Logo toko disimpan.');
+    await expect(page.locator('aside img[alt="Logo toko"]')).toHaveJSProperty('naturalWidth',1);
+    await expect(page.locator('link[data-pos-icon]')).toHaveAttribute('href',/scpos-branding/);
+    await page.reload();
+    await expect(page.getByAltText('Pratinjau logo toko')).toHaveJSProperty('naturalWidth',1);
+    await page.getByRole('button',{name:'Keluar',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Masuk ke ruang kerja',exact:true})).toBeVisible();
+    await expect(page.locator('img[alt="Logo toko"]:visible').first()).toHaveJSProperty('naturalWidth',1);
+    await page.getByLabel('Email',{exact:true}).fill('owner@example.test');
+    await page.getByLabel('Password',{exact:true}).fill('TestOnly!2026');
+    await page.getByRole('button',{name:'Masuk ke ruang kerja',exact:true}).click();
+    await nav(page,'Pengaturan');
+    await page.getByRole('button',{name:'Hapus logo',exact:true}).click();
+    await page.getByRole('button',{name:'Simpan logo',exact:true}).click();
+    await expect(page.locator('link[data-pos-icon]')).toHaveCount(0);
+    await page.reload(); await expect(page.locator('aside img[alt="Logo toko"]')).toHaveCount(0);
+});
+
+test('product types and category support create edit delete; referenced category displays reason', async ({page}) => {
+    await login(page); await nav(page,'Jenis Produk');
+    await page.getByRole('button',{name:'Tambah Jenis Produk',exact:true}).click();
+    let dialog=page.locator('dialog[open]');
+    await dialog.getByLabel('Nama jenis produk',{exact:true}).fill('Merchandise');
+    await expect(dialog.getByLabel('Kode jenis produk',{exact:true})).toHaveValue('merchandise');
+    await dialog.getByRole('button',{name:'Simpan',exact:true}).click(); await expect(dialog).toHaveCount(0);
+    let row=page.locator('main tr').filter({hasText:'Merchandise'});
+    await row.getByRole('button',{name:'Edit',exact:true}).click(); dialog=page.locator('dialog[open]');
+    await dialog.getByLabel('Nama jenis produk',{exact:true}).fill('Souvenir');
+    await dialog.getByLabel('Kode jenis produk',{exact:true}).fill('souvenir');
+    await dialog.getByRole('button',{name:'Simpan',exact:true}).click(); await expect(dialog).toHaveCount(0);
+    await nav(page,'Produk & menu'); await page.getByRole('button',{name:'Tambah Produk',exact:true}).click();
+    dialog=page.locator('dialog[open]'); await expect(dialog.getByLabel('Jenis produk',{exact:true}).locator('option').filter({hasText:'Souvenir'})).toHaveCount(1);
+    await dialog.getByRole('button',{name:'Batal',exact:true}).click(); await nav(page,'Jenis Produk');
+    row=page.locator('main tr').filter({hasText:'Souvenir'}); await row.getByRole('button',{name:'Hapus',exact:true}).click();
+    await page.locator('dialog[open]').getByRole('button',{name:'Lanjutkan',exact:true}).click(); await expect(row).toHaveCount(0);
+    await nav(page,'Kategori'); await page.getByRole('button',{name:'Tambah Kategori',exact:true}).click();
+    dialog=page.locator('dialog[open]'); await dialog.getByLabel('Nama kategori',{exact:true}).fill('Kategori Uji');
+    await dialog.getByRole('button',{name:'Simpan',exact:true}).click(); await expect(dialog).toHaveCount(0);
+    row=page.locator('main tr').filter({hasText:'Kategori Uji'}); await row.getByRole('button',{name:'Edit',exact:true}).click();
+    dialog=page.locator('dialog[open]'); await dialog.getByLabel('Nama kategori',{exact:true}).fill('Kategori Baru');
+    await dialog.getByRole('button',{name:'Simpan',exact:true}).click(); await expect(dialog).toHaveCount(0);
+    row=page.locator('main tr').filter({hasText:'Kategori Baru'}); await row.getByRole('button',{name:'Hapus',exact:true}).click();
+    await page.locator('dialog[open]').getByRole('button',{name:'Lanjutkan',exact:true}).click(); await expect(row).toHaveCount(0);
+    await page.locator('main tr').filter({hasText:'Coffee'}).getByRole('button',{name:'Hapus',exact:true}).click();
+    dialog=page.locator('dialog[open]'); await dialog.getByRole('button',{name:'Lanjutkan',exact:true}).click();
+    await expect(dialog.getByRole('alert')).toContainText('Kategori masih terhubung produk');
+    await dialog.getByRole('button',{name:'Batal',exact:true}).click();
+    await expect(page.locator('main tr').filter({hasText:'Coffee'})).toBeVisible();
+});
+
+test('SKU fills from name increments shared prefix and preserves manual edit', async ({page}) => {
+    await login(page); await nav(page,'Produk & menu');
+    for (const [name,sku,manual] of [['Americano','AME-001',null],['Americano Lemonade','AME-003','CUSTOM-LEMON']]) {
+        await page.getByRole('button',{name:'Tambah Produk',exact:true}).click(); const dialog=page.locator('dialog[open]');
+        await dialog.getByLabel('Nama produk',{exact:true}).fill(name);
+        await expect(dialog.getByLabel('SKU',{exact:true})).toHaveValue(sku);
+        await dialog.getByLabel('Kategori',{exact:true}).selectOption({label:'Coffee'});
+        await dialog.getByLabel('Harga jual (Rp)',{exact:true}).fill('15000');
+        if(manual) await dialog.getByLabel('SKU',{exact:true}).fill(manual);
+        else {
+            await dialog.getByRole('button',{name:'Tambah varian',exact:true}).click();
+            await dialog.getByLabel('Nama',{exact:true}).fill('Large');
+            await expect(dialog.getByLabel('SKU',{exact:true}).last()).toHaveValue('AME-002');
+        }
+        await dialog.getByRole('button',{name:'Simpan',exact:true}).click(); await expect(dialog).toHaveCount(0);
+        await expect(page.locator('main tr').filter({hasText:name})).toContainText(manual||sku);
+    }
 });

@@ -9,6 +9,7 @@ const db = await startDatabase(); await db.reset();
 const root = resolve('dist');
 const users = { 'owner@example.test': owner, 'cashier@example.test': cashier, 'inactive@example.test': inactive, 'admin@example.test': admin };
 const tokens = new Map();
+const passwords = new Map(), images = new Map(), signedImages = new Map();
 let loseCheckout = false;
 const token = id => { const access = [Buffer.from('{}').toString('base64url'), Buffer.from(JSON.stringify({ sub: id, exp: Math.floor(Date.now() / 1000) + 3600, role: 'authenticated' })).toString('base64url'), 'test-signature'].join('.'); tokens.set(access, id); return access; };
 const session = (id, email) => ({ access_token: token(id), token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_token: 'test-refresh-' + id, user: { id, email, aud: 'authenticated', role: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: {}, created_at: new Date().toISOString() } });
@@ -21,7 +22,7 @@ const server = createServer(async (req, res) => {
         const id = tokens.get((req.headers.authorization || '').replace(/^Bearer /, '')) || null;
         if (url.pathname === '/__test/health') return send(res, 200, { ready: true });
         if (url.pathname === '/__test/shutdown' && req.method === 'POST') { stopping = true; await db.stop(); send(res, 200, {}); server.close(() => process.exit(0)); return; }
-        if (url.pathname === '/__test/reset' && req.method === 'POST') { await db.reset(); tokens.clear(); loseCheckout = false; return send(res, 200, {}); }
+        if (url.pathname === '/__test/reset' && req.method === 'POST') { await db.reset(); tokens.clear(); passwords.clear(); images.clear(); signedImages.clear(); loseCheckout = false; return send(res, 200, {}); }
         if (url.pathname === '/__test/lose-checkout' && req.method === 'POST') { loseCheckout = true; return send(res, 200, {}); }
         if (url.pathname === '/__test/restore-response' && req.method === 'POST') { loseCheckout = false; return send(res, 200, {}); }
         if (url.pathname === '/__test/state') {
@@ -33,10 +34,18 @@ const server = createServer(async (req, res) => {
         if (url.pathname === '/auth/v1/token') {
             const data = await readBody(req); const user = users[data.email];
             if (url.searchParams.get('grant_type') === 'refresh_token') { const userId = String(data.refresh_token).replace('test-refresh-', ''); const email = Object.keys(users).find(key => users[key] === userId); if (email) return send(res, 200, session(userId, email)); }
-            if (!user || data.password !== 'TestOnly!2026') return send(res, 400, { error: 'invalid_grant', error_description: 'Invalid login credentials' });
+            if (!user || data.password !== (passwords.get(user) || 'TestOnly!2026')) return send(res, 400, { error: 'invalid_grant', error_description: 'Invalid login credentials' });
             return send(res, 200, session(user, data.email));
         }
-        if (url.pathname === '/auth/v1/user') { if (!id) return send(res, 401, { msg: 'Invalid token' }); return send(res, 200, { id, email: Object.keys(users).find(key => users[key] === id), aud: 'authenticated', user_metadata: {} }); }
+        if (url.pathname === '/auth/v1/user') {
+            if (!id) return send(res, 401, { msg: 'Invalid token' });
+            if (req.method === 'PUT') {
+                const data=await readBody(req);
+                if (typeof data.password !== 'string' || data.password.length<10) return send(res,422,{msg:'Invalid password'});
+                passwords.set(id,data.password);
+            }
+            return send(res, 200, { id, email: Object.keys(users).find(key => users[key] === id), aud: 'authenticated', user_metadata: {} });
+        }
         if (url.pathname === '/auth/v1/logout') { res.writeHead(204); return res.end(); }
         if (url.pathname === '/auth/v1/recover') return send(res, 200, {});
         if (url.pathname.startsWith('/rest/v1/rpc/scpos_')) {
@@ -46,6 +55,45 @@ const server = createServer(async (req, res) => {
                 if (name === 'checkout' && loseCheckout) return req.socket.destroy();
                 return send(res, 200, result);
             } catch (error) { return send(res, error.code === '42501' ? 403 : 400, { code: error.code, message: error.message, details: null, hint: null }); }
+        }
+        // Storage HTTP is a test double; metadata writes/read/delete exercise real Storage RLS policies.
+        if (url.pathname.startsWith('/storage/v1/')) {
+            const path=url.pathname.slice('/storage/v1/'.length);
+            const match=path.match(/^object\/(public\/|sign\/)?([^/]+)(?:\/(.+))?$/);
+            if (!match) return send(res,404,{});
+            const mode=match[1], bucket=match[2], key=decodeURIComponent(match[3]||'');
+            if (req.method==='GET') {
+                const isPublic=(await db.pool.query('select public from storage.buckets where id=$1',[bucket])).rows[0]?.public;
+                if (!(mode==='public/'&&isPublic) && signedImages.get(url.searchParams.get('token'))!==bucket+'/'+key) return send(res,403,{});
+                const image=images.get(bucket+'/'+key); if (!image) return send(res,404,{});
+                res.writeHead(200,{'Content-Type':image.type}); return res.end(image.bytes);
+            }
+            if (!id) return send(res,401,{});
+            try {
+                if (req.method==='POST'&&mode==='sign/') {
+                    const rows=await db.asUser(id,'select name from storage.objects where bucket_id=$1 and name=$2',[bucket,key]);
+                    if (!rows.length) return send(res,403,{message:'Forbidden image'});
+                    const token=crypto.randomUUID(); signedImages.set(token,bucket+'/'+key);
+                    return send(res,200,{signedURL:'/object/sign/'+bucket+'/'+key+'?token='+token});
+                }
+                if (req.method==='POST'&&!mode) {
+                    const chunks=[]; for await(const chunk of req) chunks.push(chunk);
+                    const form=await new Request('http://localhost/upload',{method:'POST',headers:{'Content-Type':req.headers['content-type']},body:Buffer.concat(chunks)}).formData();
+                    const file=[...form.values()].find(value=>value instanceof File);
+                    if (!file || !file.size || file.size>2097152) return send(res,422,{message:'Invalid file'});
+                    const bytes=Buffer.from(await file.arrayBuffer());
+                    const rows=await db.asUser(id,'insert into storage.objects(bucket_id,name,metadata) values($1,$2,$3::jsonb) returning id',[bucket,key,JSON.stringify({mimetype:file.type,size:file.size})]);
+                    images.set(bucket+'/'+key,{bytes,type:file.type});
+                    return send(res,200,{Id:rows[0].id,Key:bucket+'/'+key});
+                }
+                if (req.method==='DELETE'&&!mode) {
+                    const body=await readBody(req);
+                    const rows=await db.asUser(id,'delete from storage.objects where bucket_id=$1 and name=any($2::text[]) returning name',[bucket,body.prefixes]);
+                    for(const row of rows) images.delete(bucket+'/'+row.name);
+                    return send(res,200,rows);
+                }
+            } catch(error) { return send(res,403,{message:error.message,statusCode:'403'}); }
+            return send(res,404,{});
         }
         if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/rest/')) return send(res, 403, { message: 'Forbidden test route' });
         if (!url.pathname.startsWith('/suwanting-pos/')) return send(res, 404, {});

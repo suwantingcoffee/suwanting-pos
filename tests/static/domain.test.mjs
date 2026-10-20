@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import { cartTotals, decimalUnits, csv, routeFromHash, definitiveFailure } from '../../resources/js/domain.js';
 import { validateConfig } from '../../resources/js/config.js';
 import { createUserHandler } from '../../supabase/functions/_shared/create-user.js';
+import { validatePhoto } from '../../resources/js/backend.js';
+
+test('image validation accepts PNG signature and rejects spoofed MIME, SVG, empty or oversized files', async () => {
+    await validatePhoto(new File([new Uint8Array([137,80,78,71,13,10,26,10])], 'avatar.png', {type:'image/png'}));
+    await assert.rejects(validatePhoto(new File(['<svg/>'],'bad.svg',{type:'image/svg+xml'})));
+    await assert.rejects(validatePhoto(new File(['<html>'],'bad.png',{type:'image/png'})));
+    await assert.rejects(validatePhoto(new File([],'empty.png',{type:'image/png'})));
+    await assert.rejects(validatePhoto(new File([new Uint8Array(2097153)],'big.png',{type:'image/png'})));
+});
 
 test('currency and recipe decimals reject exponent notation, negatives, overprecision and unsafe values', () => {
     assert.equal(decimalUnits('18.125', 3), 18125);

@@ -1,0 +1,35 @@
+<section x-show="page==='account'">
+    <div class="mb-6"><p class="eyebrow">AKUN PRIBADI</p><h1 class="page-title">Akun saya</h1><p class="mt-2 text-sm text-stone-500">Kelola profil dan keamanan akun yang sedang login.</p></div>
+    <div class="grid items-start gap-6 xl:grid-cols-2">
+        <form @submit.prevent="saveAccount()" class="card">
+            <h2 class="mb-5 font-semibold">Profil saya</h2>
+            <p x-show="accountError" x-text="accountError" class="mb-4 text-sm text-red-600" role="alert"></p>
+            <fieldset :disabled="busy||loading" class="grid gap-5">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-2xl font-semibold text-orange-700">
+                        <template x-if="!accountRemovePhoto&&(accountPreview||avatar)"><img :src="accountPreview||avatar" alt="Foto akun saya" class="size-full object-cover"></template>
+                        <span x-show="accountRemovePhoto||!(accountPreview||avatar)" x-text="profile?.name?.slice(0,1)"></span>
+                    </div>
+                    <div class="min-w-0 flex-1"><label for="account-photo" class="text-sm">Foto profil</label><input id="account-photo" x-ref="accountFile" @change="selectImage($event,'account')" type="file" accept="image/jpeg,image/png,image/webp" class="field mt-2"><button x-show="accountPhoto||profile?.avatar_path" @click="clearAccountPhoto()" type="button" class="mt-2 text-xs font-semibold text-red-600">Hapus foto profil</button></div>
+                </div>
+                <p class="text-xs text-stone-500">JPG, PNG, WebP · maksimal 2 MB. Foto profil hanya bisa diakses akun Anda.</p>
+                <label class="text-sm">Nama lengkap<input x-model="accountDraft.name" required maxlength="100" autocomplete="name" class="field mt-2"></label>
+                <label class="text-sm">Nomor telepon<input x-model="accountDraft.phone" type="tel" maxlength="30" autocomplete="tel" class="field mt-2"></label>
+                <div class="rounded-xl bg-stone-50 p-4 text-sm dark:bg-stone-800"><p class="break-all" x-text="profile?.email"></p><p class="mt-2 text-xs capitalize text-stone-500" x-text="'Role: '+(profile?.role||'')"></p><p class="mt-3 text-xs leading-6 text-stone-500">Perubahan email, role, dan izin dikelola owner melalui menu Pengguna.</p></div>
+                <button class="btn btn-primary" x-text="busy?'Menyimpan…':'Simpan profil'"></button>
+            </fieldset>
+        </form>
+        <form @submit.prevent="saveAccountPassword()" class="card">
+            <h2 class="mb-5 font-semibold">Ganti password</h2>
+            <p x-show="passwordError" x-text="passwordError" role="alert" class="mb-4 text-sm text-red-600"></p>
+            <p x-show="passwordNotice" x-text="passwordNotice" role="status" class="mb-4 text-sm text-emerald-600"></p>
+            <fieldset :disabled="busy||loading" class="grid gap-5">
+                <label class="text-sm">Password saat ini<input x-model="passwordForm.current" type="password" required autocomplete="current-password" class="field mt-2"></label>
+                <label class="text-sm">Password baru<input x-model="passwordForm.next" type="password" required minlength="10" maxlength="128" autocomplete="new-password" class="field mt-2"></label>
+                <label class="text-sm">Konfirmasi password baru<input x-model="passwordForm.confirmation" type="password" required minlength="10" maxlength="128" autocomplete="new-password" class="field mt-2"></label>
+                <p class="text-xs text-stone-500">Gunakan 10–128 karakter. Password saat ini diverifikasi sebelum perubahan.</p>
+                <button class="btn btn-primary">Perbarui password</button>
+            </fieldset>
+        </form>
+    </div>
+</section>

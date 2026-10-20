@@ -29,7 +29,7 @@ Konfigurasi publik sudah menunjuk proyek `https://scfvibqjzlflbbpnrdjv.supabase.
 **Jangan masukkan secret/service_role key atau password database ke frontend, Git, atau `VITE_*`.** Publishable/anon key memang boleh berada di browser; otorisasi tetap diperiksa di database.
 
 1. Untuk proyek kosong, jalankan file SQL di `supabase/migrations` sesuai urutan nama. Alternatif setelah build: jalankan seluruh `dist/setup.sql` sekali. Script membuat schema baru dan sengaja gagal bila sudah terpasang agar tidak menimpa data.
-2. Bila SQL awal `20261020000100_static_pos.sql` sudah terpasang, jalankan **hanya** `20261020000200_product_details.sql`. Jangan ulangi setup awal. Pembaruan mempertahankan data dan menambah harga modal/deskripsi.
+2. Untuk instalasi lama, jalankan hanya file pembaruan yang belum terpasang sesuai urutan: `20261020000200_product_details.sql` (versi 2), lalu `20261021000300_account_branding_product_types.sql` (versi 3). Jangan ulangi setup awal atau migration yang sudah terpasang. Versi 3 menambah akun, logo, jenis produk, SKU otomatis, dan hapus master data dengan pemeriksaan relasi; data operasional tetap tersimpan.
 3. Supabase → Authentication → Users → Add user. Buat akun owner dengan email/password pribadi dan konfirmasi email. Akun baru otomatis menjadi kasir nonaktif; metadata signup tidak bisa memberi role owner.
 4. Aktifkan owner pertama dari SQL Editor, ganti email berikut:
 
@@ -82,7 +82,9 @@ Tidak ada PHP/MySQL di GitHub Pages. Database sekarang PostgreSQL di Supabase; p
 - Dashboard penjualan lunas, transaksi menunggu, grafik tujuh hari, metode pembayaran, menu aktif, dan peringatan stok minimum.
 - POS: pencarian/kategori, varian, kuantitas/catatan, diskon berizin, pajak, tunai/kembalian, QRIS/transfer simulasi, pemeriksaan pesanan, detail/struk cetak.
 - Pelanggan CRUD/arsip dan pencarian nama/telepon. Checkout tetap opsional: pelanggan umum, nama/meja bebas, atau pelanggan terdaftar. Nama disimpan sebagai snapshot transaksi.
-- Kategori dan produk CRUD/arsip, harga jual/modal, deskripsi, foto, varian, status aktif.
+- Kategori, jenis produk, dan produk CRUD/arsip, harga jual/modal, deskripsi, foto, varian, status aktif. Jenis bawaan Minuman, Kopi kemasan, dan Makanan tetap tersedia; jenis baru bisa dibuat sendiri. Nama/kode jenis bisa diubah tanpa memutus relasi produk.
+- Ikon profil kanan atas membuka **Akun saya** untuk semua akun aktif: nama, telepon, foto privat, dan ganti password dengan verifikasi password saat ini. Email/role/izin tetap dikelola owner melalui Pengguna.
+- Upload/ganti/hapus logo di Pengaturan ? Logo web & toko. Logo publik tampil di login, navigasi, dan favicon; PNG transparan atau gambar persegi disarankan. Foto/logo menerima JPG, PNG, WebP maksimal 2 MB. Upload avatar hanya ke folder akun sendiri; upload logo hanya owner.
 - Satuan dasar, bahan dengan minimum stok, resep produk/varian, stok masuk, penyesuaian tambah/kurang dengan alasan dan referensi, riwayat, serta laporan pemakaian bahan dengan filter tanggal/bahan.
 - Pengaturan profil toko, sakelar pajak/tarif, template struk teks aman, lebar kertas 58/80 mm, tampilkan kasir/pelanggan/SKU, cetak otomatis, pratinjau tanpa transaksi, dan pemeriksaan koneksi perangkat ke Supabase dengan timeout empat detik.
 - Pengguna/izin, laporan penjualan lunas, audit sebelum/sesudah, ekspor CSV dengan perlindungan formula spreadsheet. Ekspor laporan produk mengikuti maksimal 30 produk terlaris yang ditampilkan.
@@ -95,6 +97,14 @@ Tidak ada PHP/MySQL di GitHub Pages. Database sekarang PostgreSQL di Supabase; p
 | Katalog/inventori | Ya | Sesuai izin katalog | Tidak |
 | Diskon | Ya | Sesuai izin diskon | Tidak |
 | Pengguna/pengaturan/laporan/audit | Ya | Tidak | Tidak |
+
+## SKU dan penghapusan data
+
+Produk dan bahan baru mendapat SKU dari tiga karakter alfanumerik pertama nama, misalnya `Americano` ? `AME-001` dan `Americano Lemonade` ? `AME-002`. Awalan pendek dilengkapi `X`; nama tanpa karakter Latin memakai `PRD`/`BHN`. Angka mengikuti nomor terkecil yang belum dipakai, diperpanjang setelah 999. Produk dan varian berbagi ruang SKU; bahan memakai ruang tersendiri. SKU tersimpan dinormalisasi huruf besar.
+
+Isian otomatis tetap bisa diedit; tombol **SKU otomatis** mengaktifkan kembali saran. Saran belum memesan nomor: server menentukan ulang SKU otomatis saat menyimpan di dalam lock katalog, sehingga dua akun bersamaan tidak mendapat nomor sama. Edit produk lama mempertahankan SKU. SKU produk/varian/bahan yang diarsipkan tetap dihitung terpakai.
+
+Tombol **Hapus** tersedia untuk kategori, jenis produk, produk, pelanggan, satuan, bahan, dan resep. Dialog meminta konfirmasi. Hapus permanen hanya untuk data tanpa relasi yang menghalangi. Produk dengan transaksi/resep, pelanggan dengan transaksi, bahan dengan stok/mutasi/resep, resep dengan pemakaian, serta kategori/jenis/satuan yang masih dirujuk akan ditolak dengan alasan. **Arsipkan** mempertahankan histori. Menghapus produk kosong juga menghapus varian yang belum dipakai. Akun pengguna dinonaktifkan melalui Edit; transaksi lunas, mutasi, dan audit tidak dapat dihapus. Semua hapus/arsip tercatat bersama pengguna dan data sebelumnya.
 
 ## Integritas stok dan pembayaran
 
@@ -130,7 +140,7 @@ npm.cmd run test:browser
 
 Target harus bernama akhir `_test`. Jangan memakai koneksi Supabase operasional. Windows workspace ini juga mempunyai runtime PG native khusus tes di `../.tools/pos-pages-runtime`; test akan memakainya bila `TEST_DATABASE_URL` kosong. Browser Windows memakai Chrome yang terpasang; Linux CI memakai Chromium.
 
-Browser harness menyajikan build pada `/suwanting-pos/`, memakai PostgreSQL/RPC asli dan **test double untuk HTTP Auth**. Tes mencakup subpath/reload, tema, mobile, pelanggan, struk aman dari HTML, pajak, stok/resep, pembatasan kasir dan respons checkout yang hilang setelah commit. Tes Auth Admin memakai test double; deployment Edge Function dan konfigurasi email recovery perlu diverifikasi pada proyek tujuan. Tes tidak menyentuh data Supabase operasional.
+Browser harness menyajikan build pada `/suwanting-pos/`, memakai PostgreSQL/RPC asli dan **test double untuk HTTP Auth**. Tes mencakup subpath/reload, tema, mobile, pelanggan, struk aman dari HTML, pajak, stok/resep, pembatasan kasir dan respons checkout yang hilang setelah commit. Tes Auth, perubahan password, dan transfer file HTTP Storage memakai test double; metadata gambar menguji policy Storage RLS asli di PostgreSQL. Tes tambahan mencakup isolasi foto akun, logo owner, SKU bersamaan/manual, CRUD jenis produk/kategori, dan proteksi relasi saat hapus. Tes Auth Admin memakai test double; konfigurasi email recovery perlu diverifikasi pada proyek tujuan. Tes tidak menyentuh data Supabase operasional.
 
 ## Struktur dan batasan
 

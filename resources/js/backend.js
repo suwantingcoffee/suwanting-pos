@@ -21,13 +21,37 @@ export async function rpc(name, args = {}, timeout = 20000) {
     return data;
 }
 
-export async function uploadPhoto(file, userId) {
+export async function uploadPhoto(file, userId, bucket = 'scpos-products') {
+    await validatePhoto(file);
     const extensions = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
-    if (!extensions[file.type] || file.size > 2 * 1024 * 1024) throw new Error('Foto harus JPG, PNG, atau WebP, maksimal 2 MB.');
     const path = userId + '/' + crypto.randomUUID() + '.' + extensions[file.type];
-    const { error } = await backend().storage.from('scpos-products').upload(path, file, { contentType: file.type, upsert: false });
+    const { error } = await backend().storage.from(bucket).upload(path, file, { contentType: file.type, upsert: false });
     if (error) throw error;
     return path;
+}
+
+export async function validatePhoto(file) {
+    if (!file || !['image/jpeg','image/png','image/webp'].includes(file.type) || !file.size || file.size > 2 * 1024 * 1024) throw new Error('Gambar harus JPG, PNG, atau WebP, maksimal 2 MB.');
+    const bytes = new Uint8Array(await file.slice(0,12).arrayBuffer());
+    const signature = file.type === 'image/png' ? [137,80,78,71,13,10,26,10].every((v,i) => bytes[i] === v)
+        : file.type === 'image/jpeg' ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+        : String.fromCharCode(...bytes.slice(0,4)) === 'RIFF' && String.fromCharCode(...bytes.slice(8,12)) === 'WEBP';
+    if (!signature) throw new Error('Isi gambar tidak sesuai format JPG, PNG, atau WebP.');
+}
+
+export function logoUrl(path) {
+    return path ? backend().storage.from('scpos-branding').getPublicUrl(path).data.publicUrl : '';
+}
+
+export async function avatarUrl(path) {
+    if (!path) return '';
+    const { data, error } = await backend().storage.from('scpos-avatars').createSignedUrl(path, 3600);
+    if (error) throw error;
+    return data.signedUrl;
+}
+
+export async function removeUnusedPhoto(bucket, path) {
+    if (path) await backend().storage.from(bucket).remove([path]);
 }
 
 export async function photoUrls(products) {
