@@ -124,7 +124,7 @@ test('new product preserves cost/description/variants; new ingredient recipe int
     let dialog = page.locator('dialog[open]');
     await dialog.getByLabel('Nama produk', { exact: true }).fill('Menu Uji Baru');
     await dialog.getByLabel('SKU', { exact: true }).fill('BROWSER-NEW');
-    await dialog.getByLabel('Kategori', { exact: true }).selectOption('1');
+    await dialog.getByLabel('Kategori', { exact: true }).selectOption({ label: 'Coffee' });
     await dialog.getByLabel('Harga jual (Rp)', { exact: true }).fill('10000');
     await dialog.getByLabel('Harga modal (Rp)', { exact: true }).fill('4000.29');
     await dialog.getByLabel('Deskripsi', { exact: true }).fill('Deskripsi racikan uji');

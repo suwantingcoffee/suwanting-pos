@@ -31,3 +31,4 @@ Thumbs.db
 /.test-artifacts
 /playwright-report
 /test-results
+/supabase/.temp

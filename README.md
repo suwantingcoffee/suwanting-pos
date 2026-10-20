@@ -54,8 +54,8 @@ Role/status/izin pengguna yang sudah terdaftar bisa diedit langsung melalui RPC.
 Dari folder proyek, menggunakan Supabase CLI yang sudah login ke akun pemilik proyek:
 
 ```powershell
-npx.cmd supabase login
-npx.cmd supabase functions deploy scpos-create-user --project-ref scfvibqjzlflbbpnrdjv --use-api
+npm.cmd exec --yes --ignore-scripts=false --package=supabase -- supabase login
+npm.cmd exec --yes --ignore-scripts=false --package=supabase -- supabase functions deploy scpos-create-user --project-ref scfvibqjzlflbbpnrdjv --use-api
 ```
 
 `supabase/config.toml` menonaktifkan verifikasi JWT gateway untuk function ini karena handler sendiri memverifikasi bearer token ke Supabase Auth, kemudian membaca role owner aktif dari database. Menonaktifkan pemeriksaan gateway tidak membuat endpoint menjadi anonim.
